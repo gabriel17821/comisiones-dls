@@ -1,23 +1,29 @@
 import { useState, useMemo, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calculator, History, BarChart3, Layers } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Calculator, History, BarChart3, Layers, Settings } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
 import { useSettings } from "@/hooks/useSettings";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useClients } from "@/hooks/useClients";
+import { useSellers } from "@/hooks/useSellers";
 import { CalculatorView } from "@/components/CalculatorView";
 import { InvoiceHistory } from "@/components/InvoiceHistory";
 import { Statistics } from "@/components/Statistics";
 import { MonthlyBreakdown } from "@/components/MonthlyBreakdown";
+import { SellerManager } from "@/components/SellerManager";
+import { SettingsPage } from "@/components/SettingsPage";
 
 const Index = () => {
   const { products, loading: productsLoading, addProduct, updateProduct, deleteProduct } = useProducts();
   const { restPercentage, loading: settingsLoading, updateRestPercentage, getNextNcfNumber, updateLastNcfNumber } = useSettings();
-  const { invoices, loading: invoicesLoading, saveInvoice, deleteInvoice, updateInvoice } = useInvoices();
-  const { clients, loading: clientsLoading, addClient } = useClients();
+  const { invoices, loading: invoicesLoading, saveInvoice, deleteInvoice, updateInvoice, refetch: refetchInvoices } = useInvoices();
+  const { clients, loading: clientsLoading, addClient, refetch: refetchClients } = useClients();
+  const { sellers, activeSeller, setActiveSeller, addSeller, updateSeller, deleteSeller, setDefaultSeller } = useSellers();
 
   const [totalInvoice, setTotalInvoice] = useState(0);
   const [productAmounts, setProductAmounts] = useState<Record<string, number>>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (products.length > 0) {
@@ -97,13 +103,36 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="mx-auto max-w-5xl px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center">
-              <Calculator className="h-5 w-5 text-primary-foreground" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center">
+                <Calculator className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">Calculadora de Comisiones</h1>
+                <p className="text-sm text-muted-foreground">Tu herramienta para calcular ganancias</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Calculadora de Comisiones</h1>
-              <p className="text-sm text-muted-foreground">Tu herramienta para calcular ganancias</p>
+            
+            <div className="flex items-center gap-2">
+              <SellerManager
+                sellers={sellers}
+                activeSeller={activeSeller}
+                onSelectSeller={setActiveSeller}
+                onAddSeller={addSeller}
+                onUpdateSeller={updateSeller}
+                onDeleteSeller={deleteSeller}
+                onSetDefault={setDefaultSeller}
+              />
+              
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSettingsOpen(true)}
+                className="h-10 w-10"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
             </div>
           </div>
         </div>
@@ -150,15 +179,27 @@ const Index = () => {
               lastInvoice={lastInvoice}
               clients={clients}
               onAddClient={addClient}
+              activeSeller={activeSeller}
             />
           </TabsContent>
 
           <TabsContent value="history">
-            <InvoiceHistory invoices={invoices} loading={invoicesLoading} onDelete={deleteInvoice} />
+            <InvoiceHistory 
+              invoices={invoices} 
+              loading={invoicesLoading} 
+              onDelete={deleteInvoice}
+              onUpdateInvoice={updateInvoice}
+              clients={clients}
+              products={products}
+            />
           </TabsContent>
 
           <TabsContent value="breakdown">
-            <MonthlyBreakdown invoices={invoices} onUpdateInvoice={updateInvoice} onDeleteInvoice={deleteInvoice} />
+            <MonthlyBreakdown 
+              invoices={invoices} 
+              onUpdateInvoice={updateInvoice} 
+              onDeleteInvoice={deleteInvoice}
+            />
           </TabsContent>
 
           <TabsContent value="statistics">
@@ -166,6 +207,13 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <SettingsPage
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        clients={clients}
+        onRefetchClients={refetchClients}
+      />
     </div>
   );
 };

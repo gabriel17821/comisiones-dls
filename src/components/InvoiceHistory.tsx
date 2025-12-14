@@ -2,23 +2,51 @@ import { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, ChevronDown, ChevronUp, FileSpreadsheet, Calendar, Receipt, Hash, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Sparkles } from 'lucide-react';
+import { Trash2, ChevronDown, Calendar, Receipt, Hash, TrendingUp, ArrowUpRight, ArrowDownRight, Sparkles, Pencil, User } from 'lucide-react';
 import { Invoice } from '@/hooks/useInvoices';
+import { Client } from '@/hooks/useClients';
 import { formatCurrency, formatNumber } from '@/lib/formatters';
 import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import * as XLSX from 'xlsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { EditInvoiceDialog } from '@/components/EditInvoiceDialog';
+
+interface Product {
+  id: string;
+  name: string;
+  percentage: number;
+  color: string;
+  is_default: boolean;
+}
 
 interface InvoiceHistoryProps {
   invoices: Invoice[];
   loading: boolean;
   onDelete: (id: string) => Promise<boolean>;
+  onUpdateInvoice: (
+    id: string,
+    ncf: string,
+    invoiceDate: string,
+    totalAmount: number,
+    restAmount: number,
+    restPercentage: number,
+    restCommission: number,
+    totalCommission: number,
+    products: { name: string; amount: number; percentage: number; commission: number }[]
+  ) => Promise<any>;
+  clients: Client[];
+  products: Product[];
 }
 
-export const InvoiceHistory = ({ invoices, loading, onDelete }: InvoiceHistoryProps) => {
+export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, clients, products }: InvoiceHistoryProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
+
+  const getClientName = (clientId?: string | null) => {
+    if (!clientId) return null;
+    const client = clients.find(c => c.id === clientId);
+    return client?.name || null;
+  };
 
   const months = useMemo(() => {
     const uniqueMonths = new Set<string>();
@@ -48,12 +76,8 @@ export const InvoiceHistory = ({ invoices, loading, onDelete }: InvoiceHistoryPr
     };
   }, [filteredInvoices]);
 
-  // Calculate previous period stats for comparison
   const previousPeriodStats = useMemo(() => {
-    if (selectedMonth === 'all') {
-      // Compare all time to nothing - no comparison
-      return null;
-    }
+    if (selectedMonth === 'all') return null;
     
     const [year, month] = selectedMonth.split('-').map(Number);
     const currentDate = new Date(year, month - 1);
@@ -79,32 +103,6 @@ export const InvoiceHistory = ({ invoices, loading, onDelete }: InvoiceHistoryPr
 
   const salesChange = previousPeriodStats ? getChangePercent(totalStats.totalAmount, previousPeriodStats.totalAmount) : null;
   const commissionChange = previousPeriodStats ? getChangePercent(totalStats.totalCommission, previousPeriodStats.totalCommission) : null;
-
-  const exportToExcel = () => {
-    const data = filteredInvoices.map(inv => ({
-      'NCF': inv.ncf,
-      'Fecha Factura': format(new Date(inv.invoice_date || inv.created_at), 'dd/MM/yyyy', { locale: es }),
-      'Total Factura': inv.total_amount,
-      'Resto': inv.rest_amount,
-      '% Resto': inv.rest_percentage,
-      'Comisión Resto': inv.rest_commission,
-      'Comisión Total': inv.total_commission,
-      ...(inv.products || []).reduce((acc, p, idx) => ({
-        ...acc,
-        [`Producto ${idx + 1}`]: p.product_name,
-        [`Monto ${idx + 1}`]: p.amount,
-        [`% ${idx + 1}`]: p.percentage,
-        [`Comisión ${idx + 1}`]: p.commission,
-      }), {}),
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Facturas');
-    
-    const monthLabel = selectedMonth === 'all' ? 'todas' : selectedMonth;
-    XLSX.writeFile(wb, `comisiones_${monthLabel}.xlsx`);
-  };
 
   if (loading) {
     return (
@@ -226,11 +224,6 @@ export const InvoiceHistory = ({ invoices, loading, onDelete }: InvoiceHistoryPr
                 </SelectContent>
               </Select>
             </div>
-            
-            <Button variant="outline" onClick={exportToExcel} className="gap-2 border-border hover-lift">
-              <FileSpreadsheet className="h-4 w-4" />
-              Exportar Excel
-            </Button>
           </div>
         </Card>
 
@@ -249,110 +242,124 @@ export const InvoiceHistory = ({ invoices, loading, onDelete }: InvoiceHistoryPr
           </Card>
         ) : (
           <div className="space-y-2">
-            {filteredInvoices.map((invoice, index) => (
-              <Card 
-                key={invoice.id} 
-                className={`overflow-hidden transition-all duration-300 bg-card border-border hover-lift ${
-                  expandedInvoice === invoice.id ? 'ring-2 ring-primary/30 shadow-md' : 'hover:shadow-sm'
-                }`}
-                style={{ 
-                  animationDelay: `${index * 30}ms`,
-                  animation: 'slideUp 0.3s ease-out forwards'
-                }}
-              >
-                <div 
-                  className="p-4 cursor-pointer hover:bg-muted/20 transition-colors"
-                  onClick={() => setExpandedInvoice(expandedInvoice === invoice.id ? null : invoice.id)}
+            {filteredInvoices.map((invoice, index) => {
+              const clientName = getClientName((invoice as any).client_id);
+              
+              return (
+                <Card 
+                  key={invoice.id} 
+                  className={`overflow-hidden transition-all duration-300 bg-card border-border hover-lift ${
+                    expandedInvoice === invoice.id ? 'ring-2 ring-primary/30 shadow-md' : 'hover:shadow-sm'
+                  }`}
+                  style={{ 
+                    animationDelay: `${index * 30}ms`,
+                    animation: 'slideUp 0.3s ease-out forwards'
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="hidden sm:flex h-10 w-10 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 items-center justify-center">
-                        <span className="text-xs font-bold text-primary">#{filteredInvoices.length - index}</span>
+                  <div 
+                    className="p-4 cursor-pointer hover:bg-muted/20 transition-colors"
+                    onClick={() => setExpandedInvoice(expandedInvoice === invoice.id ? null : invoice.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="hidden sm:flex h-10 w-10 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 items-center justify-center">
+                          <span className="text-xs font-bold text-primary">#{filteredInvoices.length - index}</span>
+                        </div>
+                        <div>
+                          {clientName && (
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <User className="h-3 w-3 text-primary" />
+                              <span className="font-semibold text-sm text-foreground">{clientName}</span>
+                            </div>
+                          )}
+                          <span className="font-mono text-xs text-muted-foreground">{invoice.ncf}</span>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {format(new Date(invoice.invoice_date || invoice.created_at), "d MMM yyyy", { locale: es })}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-mono text-sm font-bold text-foreground">{invoice.ncf}</span>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {format(new Date(invoice.invoice_date || invoice.created_at), "d MMM yyyy", { locale: es })}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 sm:gap-6">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-xs text-muted-foreground">Factura</p>
-                        <p className="font-semibold text-foreground">${formatNumber(invoice.total_amount)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Comisión</p>
-                        <p className="font-bold text-success">${formatCurrency(invoice.total_commission)}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(invoice.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                        <div className={`h-8 w-8 flex items-center justify-center transition-transform duration-200 ${
-                          expandedInvoice === invoice.id ? 'rotate-180' : ''
-                        }`}>
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      
+                      <div className="flex items-center gap-3 sm:gap-6">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-xs text-muted-foreground">Factura</p>
+                          <p className="font-semibold text-foreground">${formatNumber(invoice.total_amount)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Comisión</p>
+                          <p className="font-bold text-success">${formatCurrency(invoice.total_commission)}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <EditInvoiceDialog
+                            invoice={invoice}
+                            onUpdate={onUpdateInvoice}
+                            onDelete={onDelete}
+                            trigger={
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            }
+                          />
+                          <div className={`h-8 w-8 flex items-center justify-center transition-transform duration-200 ${
+                            expandedInvoice === invoice.id ? 'rotate-180' : ''
+                          }`}>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div className={`overflow-hidden transition-all duration-300 ease-out ${
-                  expandedInvoice === invoice.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="px-4 pb-4 pt-2 border-t border-border">
-                    <div className="space-y-2 mb-4">
-                      {invoice.products?.map((p, pIndex) => (
-                        <div 
-                          key={p.id} 
-                          className="flex justify-between items-center text-sm p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                          style={{ animationDelay: `${pIndex * 50}ms` }}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="px-2 py-1 rounded bg-primary/10 text-primary text-xs font-bold">{p.percentage}%</span>
-                            <span className="text-foreground">{p.product_name}</span>
+                  <div className={`overflow-hidden transition-all duration-300 ease-out ${
+                    expandedInvoice === invoice.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+                  }`}>
+                    <div className="px-4 pb-4 pt-2 border-t border-border">
+                      <div className="space-y-2 mb-4">
+                        {invoice.products?.map((p, pIndex) => (
+                          <div 
+                            key={p.id} 
+                            className="flex justify-between items-center text-sm p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                            style={{ animationDelay: `${pIndex * 50}ms` }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="px-2 py-1 rounded bg-primary/10 text-primary text-xs font-bold">{p.percentage}%</span>
+                              <span className="text-foreground">{p.product_name}</span>
+                            </div>
+                            <div className="text-right flex items-center gap-2">
+                              <span className="text-muted-foreground">${formatNumber(p.amount)}</span>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="text-success font-semibold">${formatCurrency(p.commission)}</span>
+                            </div>
                           </div>
-                          <div className="text-right flex items-center gap-2">
-                            <span className="text-muted-foreground">${formatNumber(p.amount)}</span>
-                            <span className="text-muted-foreground">→</span>
-                            <span className="text-success font-semibold">${formatCurrency(p.commission)}</span>
+                        ))}
+                        {invoice.rest_amount > 0 && (
+                          <div className="flex justify-between items-center text-sm p-3 rounded-lg bg-muted/30">
+                            <div className="flex items-center gap-3">
+                              <span className="px-2 py-1 rounded bg-muted text-muted-foreground text-xs font-bold">{invoice.rest_percentage}%</span>
+                              <span className="text-foreground">Resto de productos</span>
+                            </div>
+                            <div className="text-right flex items-center gap-2">
+                              <span className="text-muted-foreground">${formatNumber(invoice.rest_amount)}</span>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="text-success font-semibold">${formatCurrency(invoice.rest_commission)}</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                      {invoice.rest_amount > 0 && (
-                        <div className="flex justify-between items-center text-sm p-3 rounded-lg bg-muted/30">
-                          <div className="flex items-center gap-3">
-                            <span className="px-2 py-1 rounded bg-muted text-muted-foreground text-xs font-bold">{invoice.rest_percentage}%</span>
-                            <span className="text-foreground">Resto de productos</span>
-                          </div>
-                          <div className="text-right flex items-center gap-2">
-                            <span className="text-muted-foreground">${formatNumber(invoice.rest_amount)}</span>
-                            <span className="text-muted-foreground">→</span>
-                            <span className="text-success font-semibold">${formatCurrency(invoice.rest_commission)}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex justify-between items-center pt-3 border-t border-border">
-                      <span className="font-medium text-foreground">Total Comisión</span>
-                      <span className="text-xl font-bold text-success">${formatCurrency(invoice.total_commission)}</span>
+                        )}
+                      </div>
+                      
+                      <div className="flex justify-between items-center pt-3 border-t border-border">
+                        <span className="font-medium text-foreground">Total Comisión</span>
+                        <span className="text-xl font-bold text-success">${formatCurrency(invoice.total_commission)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

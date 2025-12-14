@@ -119,6 +119,7 @@ export type Database = {
           rest_amount: number
           rest_commission: number
           rest_percentage: number
+          seller_id: string | null
           total_amount: number
           total_commission: number
         }
@@ -131,6 +132,7 @@ export type Database = {
           rest_amount: number
           rest_commission: number
           rest_percentage?: number
+          seller_id?: string | null
           total_amount: number
           total_commission: number
         }
@@ -143,6 +145,7 @@ export type Database = {
           rest_amount?: number
           rest_commission?: number
           rest_percentage?: number
+          seller_id?: string | null
           total_amount?: number
           total_commission?: number
         }
@@ -152,6 +155,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "sellers"
             referencedColumns: ["id"]
           },
         ]
@@ -180,6 +190,33 @@ export type Database = {
           is_default?: boolean
           name?: string
           percentage?: number
+        }
+        Relationships: []
+      }
+      sellers: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          is_default: boolean
+          name: string
+          phone: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          phone?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          phone?: string | null
         }
         Relationships: []
       }
