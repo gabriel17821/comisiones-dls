@@ -129,34 +129,46 @@ export const CalculatorView = ({
   // Detect if there's unsaved draft work
   const hasDraft = step1Complete || step2Complete || totalInvoice > 0;
 
-  // Show recovery notification
+  // Show recovery notification - Unique purple/violet theme
   useEffect(() => {
     if (showRecoveryPrompt && recoveredDraft && !draftRecoveryShownRef.current) {
       draftRecoveryShownRef.current = true;
       
       toast.custom((t) => (
-        <div className="relative overflow-hidden bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/50 dark:to-orange-950/50 border border-amber-200 dark:border-amber-800 rounded-xl shadow-xl px-5 py-4 w-[420px] max-w-[calc(100vw-2rem)] animate-in slide-in-from-top-full duration-500">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
+        <div className="relative overflow-hidden bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 dark:from-violet-950/80 dark:via-purple-950/80 dark:to-fuchsia-950/80 border-2 border-violet-300 dark:border-violet-700 rounded-2xl shadow-2xl shadow-violet-500/20 w-[440px] max-w-[calc(100vw-2rem)] animate-in slide-in-from-top-full duration-500">
+          {/* Animated gradient border */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500" />
           
-          <div className="flex items-center gap-4">
-            <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center flex-shrink-0">
-              <RefreshCw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          {/* Icon pulse effect */}
+          <div className="absolute top-4 left-4 h-12 w-12 rounded-2xl bg-violet-400/20 animate-ping" />
+          
+          <div className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="relative h-12 w-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/30">
+                <RefreshCw className="h-6 w-6 text-white" />
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-lg text-violet-900 dark:text-violet-100">Borrador Encontrado</p>
+                <p className="text-sm text-violet-700 dark:text-violet-300 mt-0.5">Se detectó una factura sin guardar. ¿Deseas continuar donde te quedaste?</p>
+                
+                {recoveredDraft.totalInvoice > 0 && (
+                  <div className="mt-3 px-3 py-2 rounded-xl bg-violet-100/50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800">
+                    <p className="text-xs text-violet-600 dark:text-violet-400">Monto guardado: <span className="font-bold">${formatNumber(recoveredDraft.totalInvoice)}</span></p>
+                  </div>
+                )}
+              </div>
             </div>
             
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-amber-900 dark:text-amber-100">Recuperar borrador</p>
-              <p className="text-sm text-amber-700 dark:text-amber-300">Tienes una factura sin guardar</p>
-            </div>
-            
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex gap-3 mt-4 pt-4 border-t border-violet-200 dark:border-violet-800">
               <Button
                 size="sm"
-                variant="ghost"
+                variant="outline"
                 onClick={() => {
                   clearDraft();
                   toast.dismiss(t);
                 }}
-                className="text-amber-700 hover:text-amber-900 hover:bg-amber-100"
+                className="flex-1 border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/50"
               >
                 Descartar
               </Button>
@@ -165,7 +177,6 @@ export const CalculatorView = ({
                 onClick={() => {
                   const draft = acceptRecovery();
                   if (draft) {
-                    // Restore draft data
                     setNcfSuffix(draft.ncfSuffix);
                     setInvoiceDate(new Date(draft.invoiceDate));
                     setTotalInvoice(draft.totalInvoice);
@@ -173,12 +184,10 @@ export const CalculatorView = ({
                     setStep1Complete(draft.step1Complete);
                     setStep2Complete(draft.step2Complete);
                     
-                    // Restore product amounts
                     Object.entries(draft.productAmounts).forEach(([id, amount]) => {
                       onProductChange(id, amount);
                     });
                     
-                    // Restore client
                     if (draft.selectedClientId) {
                       const client = clients.find(c => c.id === draft.selectedClientId);
                       if (client) setSelectedClient(client);
@@ -186,14 +195,14 @@ export const CalculatorView = ({
                   }
                   toast.dismiss(t);
                 }}
-                className="bg-amber-500 hover:bg-amber-600 text-white"
+                className="flex-1 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-violet-500/30"
               >
-                Recuperar
+                Recuperar Borrador
               </Button>
             </div>
           </div>
         </div>
-      ), { duration: 15000, id: 'draft-recovery' });
+      ), { duration: 20000, id: 'draft-recovery' });
     }
   }, [showRecoveryPrompt, recoveredDraft, acceptRecovery, clearDraft, clients, onProductChange, setTotalInvoice]);
 
@@ -218,7 +227,7 @@ export const CalculatorView = ({
     }
   }, [suggestedNcf]);
 
-  // Notificación de Última Factura - diseño horizontal y moderno
+  // Notificación de Última Factura - diseño horizontal premium
   useEffect(() => {
     if (lastInvoice && !toastShownRef.current) {
       const date = parseDateSafe(lastInvoice.created_at);
@@ -227,46 +236,54 @@ export const CalculatorView = ({
         ? `hoy a las ${timeStr}` 
         : (isYesterday(date) ? `ayer a las ${timeStr}` : format(date, "d MMM 'a las' h:mm a", { locale: es }));
       
-      // Get client name if available
       const clientName = (lastInvoice as any).clients?.name || 'Sin cliente';
       
       toast.custom((t) => (
-        <div className="relative overflow-hidden bg-gradient-to-r from-card via-card to-card/95 border border-border/50 rounded-xl shadow-2xl px-5 py-3.5 w-[480px] max-w-[calc(100vw-2rem)] animate-in slide-in-from-top-full duration-500">
-          {/* Top accent line */}
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary via-success to-primary/50" />
+        <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-[520px] max-w-[calc(100vw-2rem)] animate-in slide-in-from-top-full duration-500">
+          {/* Subtle gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-transparent to-emerald-500/5 pointer-events-none" />
           
-          <div className="flex items-center gap-4">
-            {/* Icon */}
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary/15 to-success/10 flex items-center justify-center flex-shrink-0">
-              <FileText className="h-5 w-5 text-primary" />
-            </div>
-            
-            {/* Main content - horizontal layout */}
-            <div className="flex-1 flex items-center justify-between gap-4 min-w-0">
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Última Factura</span>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="font-semibold text-foreground truncate">{clientName}</span>
-                  <span className="text-xs text-muted-foreground">•</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{timeAgo}</span>
+          {/* Top accent */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500" />
+          
+          <div className="relative p-5">
+            <div className="flex items-center gap-5">
+              {/* Icon */}
+              <div className="relative">
+                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                  <FileText className="h-7 w-7 text-white" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center ring-2 ring-slate-900">
+                  <Check className="h-3 w-3 text-white" />
                 </div>
               </div>
               
-              {/* Amount and Commission */}
-              <div className="flex items-center gap-4 flex-shrink-0">
-                <div className="text-right">
-                  <span className="text-xs text-muted-foreground">Monto</span>
-                  <p className="font-semibold text-foreground">${formatNumber(lastInvoice.total_amount)}</p>
+              {/* Main content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Última Factura</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-xs text-slate-400">{timeAgo}</span>
                 </div>
-                <div className="text-right pl-4 border-l border-border/50">
-                  <span className="text-xs text-muted-foreground">Comisión</span>
-                  <p className="font-bold text-success text-lg">${formatCurrency(lastInvoice.total_commission)}</p>
+                <p className="font-bold text-lg text-white truncate">{clientName}</p>
+              </div>
+              
+              {/* Amount and Commission - Well justified */}
+              <div className="flex items-stretch gap-0 flex-shrink-0">
+                <div className="text-right px-4 py-2">
+                  <p className="text-xs text-slate-400 mb-0.5">Monto</p>
+                  <p className="font-bold text-white text-lg">${formatNumber(lastInvoice.total_amount)}</p>
+                </div>
+                <div className="w-px bg-slate-700/50" />
+                <div className="text-right px-4 py-2 bg-emerald-500/10 rounded-r-xl -mr-5 pr-5">
+                  <p className="text-xs text-emerald-400 mb-0.5">Comisión</p>
+                  <p className="font-black text-emerald-400 text-xl">${formatCurrency(lastInvoice.total_commission)}</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      ), { duration: 6000 });
+      ), { duration: 7000 });
       
       toastShownRef.current = true;
     }
