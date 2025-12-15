@@ -18,7 +18,7 @@ const Index = () => {
   const { products, loading: productsLoading, addProduct, updateProduct, deleteProduct } = useProducts();
   const { restPercentage, loading: settingsLoading, updateRestPercentage, getNextNcfNumber, updateLastNcfNumber } = useSettings();
   const { invoices, loading: invoicesLoading, saveInvoice, deleteInvoice, updateInvoice, refetch: refetchInvoices } = useInvoices();
-  const { clients, loading: clientsLoading, addClient, refetch: refetchClients } = useClients();
+  const { clients, loading: clientsLoading, addClient, deleteClient, refetch: refetchClients } = useClients();
   const { sellers, activeSeller, setActiveSeller, addSeller, updateSeller, deleteSeller, setDefaultSeller } = useSellers();
 
   const [totalInvoice, setTotalInvoice] = useState(0);
@@ -179,6 +179,7 @@ const Index = () => {
               lastInvoice={lastInvoice}
               clients={clients}
               onAddClient={addClient}
+              onDeleteClient={deleteClient}
               activeSeller={activeSeller}
             />
           </TabsContent>

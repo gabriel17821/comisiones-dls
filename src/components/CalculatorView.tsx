@@ -64,6 +64,7 @@ interface CalculatorViewProps {
   lastInvoice?: Invoice;
   clients: Client[];
   onAddClient: (name: string, phone?: string, email?: string) => Promise<Client | null>;
+  onDeleteClient?: (id: string) => Promise<boolean>;
   activeSeller?: Seller | null;
 }
 
@@ -94,6 +95,7 @@ export const CalculatorView = ({
   lastInvoice,
   clients,
   onAddClient,
+  onDeleteClient,
   activeSeller,
 }: CalculatorViewProps) => {
   const [displayValue, setDisplayValue] = useState(totalInvoice > 0 ? formatNumber(totalInvoice) : '');
@@ -338,6 +340,7 @@ export const CalculatorView = ({
                       selectedClient={selectedClient}
                       onSelectClient={setSelectedClient}
                       onAddClient={onAddClient}
+                      onDeleteClient={onDeleteClient}
                     />
                     
                     <Button 
