@@ -1,8 +1,11 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TrendingUp, DollarSign, Receipt, ChevronLeft, ChevronRight, FileText, ArrowUpRight, Award, Trophy, BarChart3, Calendar, Wallet } from 'lucide-react';
+import { 
+  TrendingUp, TrendingDown, DollarSign, Receipt, ChevronLeft, ChevronRight, 
+  FileText, Users, Package, Calendar, ArrowUpRight, ArrowDownRight,
+  BarChart3, PieChart
+} from 'lucide-react';
 import { Invoice } from '@/hooks/useInvoices';
 import { Client } from '@/hooks/useClients';
 import { formatCurrency, formatNumber, parseDateSafe } from '@/lib/formatters';
@@ -11,6 +14,7 @@ import { es } from 'date-fns/locale';
 import { generateMonthlyPDF } from '@/lib/pdfGenerator';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 
 interface AdvancedStatisticsProps {
   invoices: Invoice[];
@@ -25,17 +29,20 @@ interface ProductSummary {
   percentage: number;
 }
 
-export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedStatisticsProps) => {
+interface ClientSummary {
+  id: string;
+  name: string;
+  invoiceCount: number;
+  totalAmount: number;
+  totalCommission: number;
+}
+
+export const AdvancedStatistics = ({ invoices, sellerName, clients = [] }: AdvancedStatisticsProps) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly');
-  const [typingText, setTypingText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  
   const displayName = sellerName || 'NEFTALÍ';
 
   // Stats for selected month
-  const selectedMonthStats = useMemo(() => {
+  const stats = useMemo(() => {
     const start = startOfMonth(selectedDate);
     const end = endOfMonth(selectedDate);
     
@@ -44,6 +51,7 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
       return isWithinInterval(date, { start, end });
     });
 
+    // Products breakdown
     const productMap: Record<string, ProductSummary> = {};
     let restTotal = 0;
     let restCommission = 0;
@@ -67,8 +75,8 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
     });
 
     if (restTotal > 0) {
-      productMap['Resto de productos'] = {
-        name: 'Resto de productos',
+      productMap['Resto'] = {
+        name: 'Resto',
         totalAmount: restTotal,
         totalCommission: restCommission,
         percentage: 25,
@@ -77,12 +85,34 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
 
     const productBreakdown = Object.values(productMap).sort((a, b) => b.totalCommission - a.totalCommission);
 
-    const bestSale = monthInvoices.reduce((best, inv) => 
-      Number(inv.total_amount) > Number(best?.total_amount || 0) ? inv : best
-    , monthInvoices[0]);
+    // Client breakdown
+    const clientMap: Record<string, ClientSummary> = {};
+    monthInvoices.forEach(inv => {
+      const invWithClient = inv as any;
+      const clientId = invWithClient.client_id || 'unknown';
+      const clientData = invWithClient.clients;
+      const clientName = clientData?.name || 'Sin cliente';
+      
+      if (!clientMap[clientId]) {
+        clientMap[clientId] = {
+          id: clientId,
+          name: clientName,
+          invoiceCount: 0,
+          totalAmount: 0,
+          totalCommission: 0,
+        };
+      }
+      clientMap[clientId].invoiceCount += 1;
+      clientMap[clientId].totalAmount += Number(inv.total_amount);
+      clientMap[clientId].totalCommission += Number(inv.total_commission);
+    });
 
+    const clientBreakdown = Object.values(clientMap).sort((a, b) => b.totalCommission - a.totalCommission);
+
+    // Daily data for chart
     const daysInMonth = getDaysInMonth(selectedDate);
-    const dailyData: { day: number; sales: number; commission: number; invoiceCount: number }[] = [];
+    const dailyData: { day: number; date: string; ventas: number; comision: number; facturas: number }[] = [];
+    
     for (let day = 1; day <= daysInMonth; day++) {
       const dayInvoices = monthInvoices.filter(inv => {
         const date = parseDateSafe(inv.invoice_date || inv.created_at);
@@ -90,14 +120,16 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
       });
       dailyData.push({
         day,
-        sales: dayInvoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0),
-        commission: dayInvoices.reduce((sum, inv) => sum + Number(inv.total_commission), 0),
-        invoiceCount: dayInvoices.length,
+        date: `${day}`,
+        ventas: dayInvoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0),
+        comision: dayInvoices.reduce((sum, inv) => sum + Number(inv.total_commission), 0),
+        facturas: dayInvoices.length,
       });
     }
 
+    // Best day
     const bestDay = dailyData.reduce((best, current) => 
-      current.commission > best.commission ? current : best
+      current.comision > best.comision ? current : best
     , dailyData[0]);
 
     return {
@@ -109,13 +141,15 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
         ? monthInvoices.reduce((sum, inv) => sum + Number(inv.total_commission), 0) / monthInvoices.length
         : 0,
       productBreakdown,
-      bestSale,
+      clientBreakdown,
       dailyData,
       bestDay,
+      uniqueClients: new Set(monthInvoices.map(inv => (inv as any).client_id).filter(Boolean)).size,
     };
   }, [invoices, selectedDate]);
 
-  const previousMonthStats = useMemo(() => {
+  // Previous month for comparison
+  const prevStats = useMemo(() => {
     const prevDate = subMonths(selectedDate, 1);
     const start = startOfMonth(prevDate);
     const end = endOfMonth(prevDate);
@@ -132,16 +166,12 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
     };
   }, [invoices, selectedDate]);
 
-  const commissionChange = previousMonthStats.totalCommission > 0 
-    ? ((selectedMonthStats.totalCommission - previousMonthStats.totalCommission) / previousMonthStats.totalCommission) * 100 
+  const commissionChange = prevStats.totalCommission > 0 
+    ? ((stats.totalCommission - prevStats.totalCommission) / prevStats.totalCommission) * 100 
     : 0;
 
-  const salesChange = previousMonthStats.totalSales > 0 
-    ? ((selectedMonthStats.totalSales - previousMonthStats.totalSales) / previousMonthStats.totalSales) * 100 
-    : 0;
-
-  const invoiceCountChange = previousMonthStats.invoiceCount > 0
-    ? ((selectedMonthStats.invoiceCount - previousMonthStats.invoiceCount) / previousMonthStats.invoiceCount) * 100
+  const salesChange = prevStats.totalSales > 0 
+    ? ((stats.totalSales - prevStats.totalSales) / prevStats.totalSales) * 100 
     : 0;
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -151,76 +181,21 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
   const monthLabel = format(selectedDate, "MMMM yyyy", { locale: es });
   const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
-  const executiveSummary = useMemo(() => {
-    if (selectedMonthStats.invoiceCount === 0) {
-      return `No hay facturas registradas para ${capitalizedMonth}.`;
-    }
-
-    const topProduct = selectedMonthStats.productBreakdown[0];
-    const secondProduct = selectedMonthStats.productBreakdown[1];
-    
-    let summary = `En el mes de ${capitalizedMonth.split(' ')[0].toLowerCase()}, se logró un total de ventas para DLS de $${formatNumber(selectedMonthStats.totalSales)}. `;
-    
-    if (topProduct) {
-      summary += `El mayor rendimiento provino de "${topProduct.name}", que generó $${formatCurrency(topProduct.totalCommission)} en comisiones para ${displayName}. `;
-    }
-    
-    if (secondProduct) {
-      summary += `Le sigue "${secondProduct.name}" con $${formatNumber(secondProduct.totalAmount)} en ventas.`;
-    }
-    
-    return summary;
-  }, [selectedMonthStats, capitalizedMonth, displayName]);
-
-  useEffect(() => {
-    if (viewMode === 'monthly' && selectedMonthStats.invoiceCount > 0) {
-      setTypingText('');
-      setIsTyping(true);
-      let index = 0;
-      const interval = setInterval(() => {
-        if (index < executiveSummary.length) {
-          setTypingText(executiveSummary.slice(0, index + 1));
-          index++;
-        } else {
-          setIsTyping(false);
-          clearInterval(interval);
-        }
-      }, 6);
-      return () => clearInterval(interval);
-    }
-  }, [executiveSummary, viewMode, selectedMonthStats.invoiceCount]);
-
-  const getChangeLabel = (change: number) => {
-    if (change === 0) return '0%';
-    return `${change > 0 ? '↗' : '↘'} ${Math.abs(change).toFixed(0)}%`;
-  };
-
-  const maxDailyCommission = Math.max(...selectedMonthStats.dailyData.map(d => d.commission), 1);
-  const totalCommission = selectedMonthStats.productBreakdown.reduce((sum, p) => sum + p.totalCommission, 0);
-
-  const years = useMemo(() => {
-    const yearsSet = new Set<number>();
-    yearsSet.add(new Date().getFullYear());
-    invoices.forEach(inv => {
-      const date = parseDateSafe(inv.invoice_date || inv.created_at);
-      yearsSet.add(date.getFullYear());
-    });
-    return Array.from(yearsSet).sort((a, b) => b - a);
-  }, [invoices]);
-
   const handleDownloadPdf = () => {
-    generateMonthlyPDF(selectedMonthStats.invoices, capitalizedMonth);
-    toast.success('PDF generado');
+    generateMonthlyPDF(stats.invoices, capitalizedMonth);
+    toast.success('PDF generado correctamente');
   };
+
+  const totalProductCommission = stats.productBreakdown.reduce((sum, p) => sum + p.totalCommission, 0);
 
   if (invoices.length === 0) {
     return (
-      <Card className="p-12 text-center bg-card border-border">
-        <div className="h-16 w-16 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
+      <Card className="p-16 text-center">
+        <div className="h-16 w-16 rounded-2xl bg-muted mx-auto mb-6 flex items-center justify-center">
           <BarChart3 className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="font-semibold text-foreground mb-1">Sin datos</h3>
-        <p className="text-sm text-muted-foreground">Guarda facturas para ver estadísticas</p>
+        <h3 className="font-semibold text-xl text-foreground mb-2">Sin datos aún</h3>
+        <p className="text-muted-foreground">Guarda tu primera factura para ver las estadísticas</p>
       </Card>
     );
   }
@@ -228,240 +203,229 @@ export const AdvancedStatistics = ({ invoices, sellerName, clients }: AdvancedSt
   return (
     <TooltipProvider>
       <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
-            <Button variant={viewMode === 'monthly' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('monthly')}>Mensual</Button>
-            <Button variant={viewMode === 'annual' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('annual')}>Anual</Button>
-            <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="gap-2">
-              <FileText className="h-4 w-4" />PDF
+        {/* Header with Navigation */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => navigateMonth('prev')} className="h-8 w-8">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <h2 className="text-xl font-bold text-foreground min-w-[180px] text-center">{capitalizedMonth}</h2>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => navigateMonth('next')} 
+              disabled={isSameMonth(selectedDate, new Date())} 
+              className="h-8 w-8"
+            >
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigateMonth('prev')} className="h-9 w-9">
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <span className="text-lg font-bold text-foreground">{capitalizedMonth}</span>
-            <Button variant="ghost" size="icon" onClick={() => navigateMonth('next')} disabled={isSameMonth(selectedDate, new Date())} className="h-9 w-9">
-              <ChevronRight className="h-5 w-5" />
-            </Button>
-            <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
-              <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {years.map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="gap-2">
+            <FileText className="h-4 w-4" />
+            Exportar PDF
+          </Button>
         </div>
 
-        {/* Bento Grid - Main Cards - Diseño mejorado */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Commission Card */}
-          <Card className="lg:col-span-1 p-8 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white relative overflow-hidden shadow-xl">
-            <div className="absolute top-0 right-0 opacity-10">
-              <ArrowUpRight className="h-40 w-40 -mt-10 -mr-10" />
+        {/* KPI Cards - Clean minimal design */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Commission */}
+          <Card className="p-5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-white/80">Comisión</span>
+              <DollarSign className="h-5 w-5 text-white/60" />
             </div>
-            <div className="absolute bottom-0 left-0 opacity-5">
-              <DollarSign className="h-32 w-32 -mb-8 -ml-8" />
-            </div>
-            <div className="flex items-center gap-2 mb-4">
-              <Wallet className="h-6 w-6 opacity-90" />
-              <span className="text-sm opacity-90 font-semibold uppercase tracking-wider">Comisiones de {displayName.toUpperCase()}</span>
-            </div>
-            <p className="text-6xl font-black mb-4">${formatCurrency(selectedMonthStats.totalCommission)}</p>
-            <div className="flex items-center gap-3">
-              <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${commissionChange >= 0 ? 'bg-white/30' : 'bg-red-400/50'}`}>
-                {getChangeLabel(commissionChange)}
-              </span>
-              <span className="text-sm opacity-80 font-medium">vs mes anterior</span>
-            </div>
+            <p className="text-3xl font-black">${formatCurrency(stats.totalCommission)}</p>
+            {commissionChange !== 0 && (
+              <div className={`flex items-center gap-1 mt-2 text-sm ${commissionChange >= 0 ? 'text-emerald-100' : 'text-red-200'}`}>
+                {commissionChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                <span>{Math.abs(commissionChange).toFixed(0)}% vs anterior</span>
+              </div>
+            )}
           </Card>
 
-          {/* Sales Card */}
-          <Card className="p-6 hover-lift border-l-4 border-l-blue-500 bg-card shadow-md">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-12 w-12 rounded-xl bg-blue-500/15 flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-blue-500" />
-              </div>
-              <span className="text-sm text-muted-foreground font-semibold uppercase tracking-wide">Ventas Totales</span>
+          {/* Sales */}
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-muted-foreground">Ventas</span>
+              <TrendingUp className="h-5 w-5 text-muted-foreground/60" />
             </div>
-            <p className="text-4xl font-black text-foreground">${formatNumber(selectedMonthStats.totalSales)}</p>
+            <p className="text-3xl font-black text-foreground">${formatNumber(stats.totalSales)}</p>
             {salesChange !== 0 && (
-              <span className={`inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-lg text-sm font-semibold ${salesChange >= 0 ? 'bg-success/15 text-success' : 'bg-destructive/15 text-destructive'}`}>
-                {getChangeLabel(salesChange)}
-              </span>
+              <div className={`flex items-center gap-1 mt-2 text-sm ${salesChange >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {salesChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                <span>{Math.abs(salesChange).toFixed(0)}%</span>
+              </div>
             )}
           </Card>
 
-          {/* Invoices Card */}
-          <Card className="p-6 hover-lift border-l-4 border-l-purple-500 bg-card shadow-md">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-12 w-12 rounded-xl bg-purple-500/15 flex items-center justify-center">
-                <Receipt className="h-6 w-6 text-purple-500" />
-              </div>
-              <span className="text-sm text-muted-foreground font-semibold uppercase tracking-wide">Facturas</span>
+          {/* Invoices */}
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-muted-foreground">Facturas</span>
+              <Receipt className="h-5 w-5 text-muted-foreground/60" />
             </div>
-            <p className="text-4xl font-black text-foreground">{selectedMonthStats.invoiceCount}</p>
-            {invoiceCountChange !== 0 && (
-              <span className={`inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-lg text-sm font-semibold ${invoiceCountChange >= 0 ? 'bg-success/15 text-success' : 'bg-destructive/15 text-destructive'}`}>
-                {getChangeLabel(invoiceCountChange)}
-              </span>
-            )}
+            <p className="text-3xl font-black text-foreground">{stats.invoiceCount}</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Promedio: ${formatCurrency(stats.avgPerInvoice)}
+            </p>
+          </Card>
+
+          {/* Clients */}
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-muted-foreground">Clientes</span>
+              <Users className="h-5 w-5 text-muted-foreground/60" />
+            </div>
+            <p className="text-3xl font-black text-foreground">{stats.uniqueClients}</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              activos este mes
+            </p>
           </Card>
         </div>
 
-        {/* Executive Summary - Más destacado */}
-        {selectedMonthStats.invoiceCount > 0 && (
-          <Card className="p-6 bg-gradient-to-r from-amber-50 via-white to-amber-50 border-2 border-amber-200/50 shadow-md">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-2xl">💡</span>
-              <h3 className="font-bold text-lg text-foreground">Resumen Ejecutivo</h3>
+        {/* Performance Chart */}
+        {stats.invoiceCount > 0 && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="font-semibold text-foreground">Rendimiento Diario</h3>
+                <p className="text-sm text-muted-foreground">Comisiones generadas día a día</p>
+              </div>
+              {stats.bestDay && stats.bestDay.comision > 0 && (
+                <div className="text-right">
+                  <p className="text-sm text-muted-foreground">Mejor día</p>
+                  <p className="font-bold text-success">{stats.bestDay.day} de {format(selectedDate, 'MMM', { locale: es })} • ${formatCurrency(stats.bestDay.comision)}</p>
+                </div>
+              )}
             </div>
-            <p className="text-base text-muted-foreground leading-relaxed">
-              {typingText}{isTyping && <span className="inline-block w-0.5 h-5 bg-primary ml-0.5 animate-pulse" />}
-            </p>
+            
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stats.dailyData}>
+                  <defs>
+                    <linearGradient id="colorComision" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis 
+                    dataKey="date" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis hide />
+                  <RechartsTooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    }}
+                    formatter={(value: number, name: string) => [
+                      `$${name === 'comision' ? formatCurrency(value) : formatNumber(value)}`,
+                      name === 'comision' ? 'Comisión' : 'Ventas'
+                    ]}
+                    labelFormatter={(label) => `Día ${label}`}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="comision" 
+                    stroke="hsl(var(--success))" 
+                    strokeWidth={2}
+                    fill="url(#colorComision)" 
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
         )}
 
-        {/* Strategic + Origin - Diseño mejorado */}
-        {selectedMonthStats.productBreakdown.length > 0 && (
+        {/* Products & Clients Grid */}
+        {stats.invoiceCount > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="p-6 shadow-md">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="h-10 w-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                  <BarChart3 className="h-5 w-5 text-amber-500" />
-                </div>
-                <h3 className="font-bold text-lg text-foreground">Resumen Estratégico</h3>
+            {/* Products Breakdown */}
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <Package className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold text-foreground">Productos</h3>
               </div>
               <div className="space-y-4">
-                {selectedMonthStats.productBreakdown[0] && (
-                  <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 to-amber-500/5 border-2 border-amber-500/25">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Trophy className="h-5 w-5 text-amber-500" />
-                      <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">🏆 Ganador #1</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-lg text-foreground">{selectedMonthStats.productBreakdown[0].name}</p>
-                        <p className="text-sm text-muted-foreground">Venta: ${formatNumber(selectedMonthStats.productBreakdown[0].totalAmount)}</p>
-                      </div>
-                      <p className="text-3xl font-black text-success">${formatCurrency(selectedMonthStats.productBreakdown[0].totalCommission)}</p>
-                    </div>
-                  </div>
-                )}
-                {selectedMonthStats.productBreakdown[1] && (
-                  <div className="p-5 rounded-2xl bg-muted/50 border border-border">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Award className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">#2 Segundo Lugar</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <p className="font-bold text-lg text-foreground">{selectedMonthStats.productBreakdown[1].name}</p>
-                      <p className="text-2xl font-bold text-success">${formatCurrency(selectedMonthStats.productBreakdown[1].totalCommission)}</p>
-                    </div>
-                  </div>
-                )}
-                {selectedMonthStats.bestSale && (
-                  <div className="p-5 rounded-2xl bg-primary/5 border-2 border-primary/20">
-                    <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp className="h-5 w-5 text-primary" />
-                      <span className="text-xs font-bold text-primary uppercase tracking-wider">📈 Venta Récord</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-black text-3xl text-foreground">${formatNumber(selectedMonthStats.bestSale.total_amount)}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{selectedMonthStats.bestSale.ncf}</p>
-                      </div>
-                      <p className="text-2xl font-bold text-success">${formatCurrency(selectedMonthStats.bestSale.total_commission)}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            <Card className="p-6 shadow-md">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="h-10 w-10 rounded-xl bg-blue-500/15 flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-blue-500" />
-                </div>
-                <h3 className="font-bold text-lg text-foreground">Origen de los ingresos</h3>
-              </div>
-              <div className="space-y-4">
-                {selectedMonthStats.productBreakdown.slice(0, 4).map((product, index) => {
-                  const percentage = totalCommission > 0 ? (product.totalCommission / totalCommission) * 100 : 0;
-                  const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500'];
+                {stats.productBreakdown.slice(0, 5).map((product, index) => {
+                  const percentage = totalProductCommission > 0 ? (product.totalCommission / totalProductCommission) * 100 : 0;
+                  const colors = ['bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500'];
                   return (
-                    <div key={product.name} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs font-bold text-white ${colors[index]}`}>{index + 1}</span>
-                          <span className="font-semibold text-foreground">{product.name}</span>
+                    <div key={product.name}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${colors[index]}`} />
+                          <span className="text-sm font-medium text-foreground">{product.name}</span>
                         </div>
-                        <div className="text-right">
-                          <span className="font-bold text-lg text-success">${formatCurrency(product.totalCommission)}</span>
-                          <span className="text-muted-foreground ml-2 text-sm">{percentage.toFixed(1)}%</span>
-                        </div>
+                        <span className="text-sm font-bold text-success">${formatCurrency(product.totalCommission)}</span>
                       </div>
-                      <div className="h-3 bg-muted rounded-full overflow-hidden">
-                        <div className={`h-full ${colors[index]} transition-all duration-500`} style={{ width: `${percentage}%` }} />
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${colors[index]} transition-all duration-500`} 
+                          style={{ width: `${percentage}%` }} 
+                        />
                       </div>
                     </div>
                   );
                 })}
               </div>
             </Card>
+
+            {/* Top Clients */}
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold text-foreground">Top Clientes</h3>
+              </div>
+              <div className="space-y-3">
+                {stats.clientBreakdown.slice(0, 5).map((client, index) => (
+                  <div key={client.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <p className="font-medium text-foreground text-sm">{client.name}</p>
+                        <p className="text-xs text-muted-foreground">{client.invoiceCount} factura{client.invoiceCount !== 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-success text-sm">${formatCurrency(client.totalCommission)}</p>
+                      <p className="text-xs text-muted-foreground">${formatNumber(client.totalAmount)}</p>
+                    </div>
+                  </div>
+                ))}
+                {stats.clientBreakdown.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No hay clientes este mes</p>
+                )}
+              </div>
+            </Card>
           </div>
         )}
 
-        {/* Daily Activity - Mejorado */}
-        {selectedMonthStats.invoiceCount > 0 && (
-          <Card className="p-6 shadow-md">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="font-bold text-lg text-foreground">Actividad Diaria</h3>
+        {/* Quick Insights */}
+        {stats.invoiceCount > 0 && stats.productBreakdown.length > 0 && (
+          <Card className="p-5 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 border-primary/20">
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <PieChart className="h-5 w-5 text-primary" />
               </div>
-              {selectedMonthStats.bestDay && selectedMonthStats.bestDay.commission > 0 && (
-                <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/15 to-amber-500/5 border border-amber-500/25">
-                  <Trophy className="h-5 w-5 text-amber-500" />
-                  <span className="text-sm font-semibold text-amber-600">
-                    🔥 Mejor día: {selectedMonthStats.bestDay.day} de {format(selectedDate, 'MMMM', { locale: es })}
-                  </span>
-                </div>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground mb-5">Pasa el cursor sobre una barra para ver el detalle de ese día.</p>
-            <div className="flex items-end gap-1 h-40 mt-4">
-              {selectedMonthStats.dailyData.map((day) => {
-                const heightPercentage = maxDailyCommission > 0 ? (day.commission / maxDailyCommission) * 100 : 0;
-                const isBestDay = selectedMonthStats.bestDay?.day === day.day;
-                return (
-                  <Tooltip key={day.day}>
-                    <TooltipTrigger asChild>
-                      <div 
-                        className={`flex-1 rounded-t-md cursor-pointer transition-all duration-200 hover:opacity-80 ${day.invoiceCount > 0 ? (isBestDay ? 'bg-gradient-to-t from-emerald-600 to-emerald-400' : 'bg-gradient-to-t from-blue-600 to-blue-400') : 'bg-muted'}`}
-                        style={{ height: `${Math.max(heightPercentage, day.invoiceCount > 0 ? 8 : 2)}%`, minHeight: day.invoiceCount > 0 ? '10px' : '3px' }}
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent className="p-4 bg-card border-border shadow-xl">
-                      <p className="font-bold text-base mb-2">{format(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day.day), "EEEE d 'de' MMMM", { locale: es })}</p>
-                      <div className="space-y-1 text-sm">
-                        <p>Ventas: <span className="font-bold">${formatNumber(day.sales)}</span></p>
-                        <p className="text-success">Comisión: <span className="font-bold">${formatCurrency(day.commission)}</span></p>
-                        <p>Facturas: <span className="font-bold">{day.invoiceCount}</span></p>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
-            </div>
-            <div className="flex gap-1 mt-3">
-              {selectedMonthStats.dailyData.map((day) => (
-                <div key={day.day} className="flex-1 text-center text-xs text-muted-foreground font-medium">{day.day % 5 === 1 || day.day === 1 ? day.day : ''}</div>
-              ))}
+              <div>
+                <h4 className="font-semibold text-foreground mb-1">Resumen del mes</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  En {capitalizedMonth.split(' ')[0].toLowerCase()}, 
+                  <span className="font-medium text-foreground"> {stats.productBreakdown[0]?.name}</span> fue el producto con mayor rendimiento, 
+                  generando <span className="font-bold text-success">${formatCurrency(stats.productBreakdown[0]?.totalCommission || 0)}</span> en comisiones.
+                  {stats.clientBreakdown[0] && (
+                    <> Tu mejor cliente fue <span className="font-medium text-foreground">{stats.clientBreakdown[0].name}</span> con {stats.clientBreakdown[0].invoiceCount} factura{stats.clientBreakdown[0].invoiceCount !== 1 ? 's' : ''}.</>
+                  )}
+                </p>
+              </div>
             </div>
           </Card>
         )}
