@@ -6,7 +6,7 @@ import { Trash2, ChevronDown, Calendar, Receipt, Hash, TrendingUp, ArrowUpRight,
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Invoice } from '@/hooks/useInvoices';
 import { Client } from '@/hooks/useClients';
-import { formatCurrency, formatNumber } from '@/lib/formatters';
+import { formatCurrency, formatNumber, parseDateSafe } from '@/lib/formatters';
 import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -52,7 +52,7 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
   const months = useMemo(() => {
     const uniqueMonths = new Set<string>();
     invoices.forEach(inv => {
-      const date = new Date(inv.invoice_date || inv.created_at);
+      const date = parseDateSafe(inv.invoice_date || inv.created_at);
       uniqueMonths.add(format(date, 'yyyy-MM'));
     });
     return Array.from(uniqueMonths).sort().reverse();
@@ -66,7 +66,7 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
     const end = endOfMonth(new Date(year, month - 1));
     
     return invoices.filter(inv => 
-      isWithinInterval(new Date(inv.invoice_date || inv.created_at), { start, end })
+      isWithinInterval(parseDateSafe(inv.invoice_date || inv.created_at), { start, end })
     );
   }, [invoices, selectedMonth]);
 
@@ -87,7 +87,7 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
     const end = endOfMonth(prevDate);
     
     const prevInvoices = invoices.filter(inv => 
-      isWithinInterval(new Date(inv.invoice_date || inv.created_at), { start, end })
+      isWithinInterval(parseDateSafe(inv.invoice_date || inv.created_at), { start, end })
     );
     
     return {
@@ -275,7 +275,7 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                           )}
                           <span className="font-mono text-xs text-muted-foreground">{invoice.ncf}</span>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {format(new Date(invoice.invoice_date || invoice.created_at), "d MMM yyyy", { locale: es })}
+                            {format(parseDateSafe(invoice.invoice_date || invoice.created_at), "d MMM yyyy", { locale: es })}
                           </p>
                         </div>
                       </div>
@@ -292,6 +292,7 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                         <div className="flex items-center gap-1">
                           <EditInvoiceDialog
                             invoice={invoice}
+                            clients={clients}
                             onUpdate={onUpdateInvoice}
                             onDelete={onDelete}
                             trigger={

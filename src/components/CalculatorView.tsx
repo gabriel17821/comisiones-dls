@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RotateCcw, Calculator, DollarSign, Check, Package, CalendarIcon, FileText, CheckCircle2, BellRing, User } from "lucide-react";
+import { RotateCcw, Calculator, DollarSign, Check, Package, CalendarIcon, FileText, CheckCircle2, User } from "lucide-react";
 import { EditRestPercentageDialog } from "@/components/EditRestPercentageDialog";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import { ProductManager } from "@/components/ProductManager";
@@ -117,7 +117,7 @@ export const CalculatorView = ({
     }
   }, [suggestedNcf]);
 
-  // Notificación de Última Factura - compacta y elegante
+  // Notificación de Última Factura - elegante y moderna
   useEffect(() => {
     if (lastInvoice && !toastShownRef.current) {
       const date = parseDateSafe(lastInvoice.created_at);
@@ -126,30 +126,44 @@ export const CalculatorView = ({
         : (isYesterday(date) ? 'Ayer' : format(date, 'd MMM', { locale: es }));
       
       toast.custom((t) => (
-        <div className="relative overflow-hidden bg-card border border-border rounded-lg shadow-lg p-3 w-72 animate-in slide-in-from-left-full duration-300">
-          <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded-l-lg" />
-          <div className="flex items-center gap-3 pl-2">
-            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-              <BellRing className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-foreground truncate">Última Factura</span>
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">{timeAgo}</span>
+        <div className="relative overflow-hidden bg-gradient-to-br from-card to-card/95 border border-border/60 rounded-2xl shadow-2xl p-4 w-80 animate-in slide-in-from-right-full duration-500">
+          {/* Gradient accent bar */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-primary/80 to-success rounded-t-2xl" />
+          
+          <div className="flex items-start gap-4 pt-1">
+            {/* Icon container */}
+            <div className="relative">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shadow-inner">
+                <FileText className="h-6 w-6 text-primary" />
               </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="font-mono text-[11px] text-muted-foreground truncate">
+              <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-success flex items-center justify-center ring-2 ring-card">
+                <Check className="h-2.5 w-2.5 text-success-foreground" />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-foreground">Última Factura</span>
+                <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">{timeAgo}</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-semibold text-foreground bg-muted/40 px-2 py-1 rounded-md">
                   {lastInvoice.ncf}
                 </span>
-                <span className="text-muted-foreground/50">•</span>
-                <span className="font-bold text-success text-xs">
-                  ${formatNumber(lastInvoice.total_commission)}
+              </div>
+              
+              <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                <span className="text-xs text-muted-foreground">Comisión generada</span>
+                <span className="text-lg font-black text-success">
+                  ${formatCurrency(lastInvoice.total_commission)}
                 </span>
               </div>
             </div>
           </div>
         </div>
-      ), { duration: 4000 });
+      ), { duration: 5000 });
       
       toastShownRef.current = true;
     }
