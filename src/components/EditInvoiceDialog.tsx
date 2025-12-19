@@ -237,10 +237,8 @@ export const EditInvoiceDialog = ({ invoice, clients, onUpdate, onDelete, trigge
             </Label>
             <ClientSearchSelect
               clients={clients || []}
-              selectedClientId={selectedClientId}
-              onSelectClient={setSelectedClientId}
-              placeholder="Buscar cliente..."
-              allowClear={true}
+              value={selectedClientId || ''}
+              onChange={(val) => setSelectedClientId(val || null)}
             />
           </div>
 
