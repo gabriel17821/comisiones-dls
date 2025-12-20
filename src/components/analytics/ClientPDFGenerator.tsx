@@ -22,13 +22,16 @@ interface ClientPDFGeneratorProps {
     totalCommission: number;
     invoiceCount: number;
     avgTicket: number;
-    monthlyGrowth: { current: number; previous: number; growth: number };
-    quarterlyGrowth: { current: number; previous: number; growth: number };
-    semesterGrowth: { current: number; previous: number; growth: number };
+    monthlyGrowth: { currentSales: number; previousSales: number; salesGrowth: number };
+    quarterlyGrowth: { currentSales: number; previousSales: number; salesGrowth: number };
+    semesterGrowth: { currentSales: number; previousSales: number; salesGrowth: number };
     monthlyTrend: Array<{ month: string; label: string; sales: number; commission: number; invoices: number }>;
-    productBreakdown: Array<{ name: string; sales: number; commission: number; count: number; quantity?: number }>;
-    status: 'growing' | 'stable' | 'declining' | 'inactive';
+    productAnalysis: Array<{ name: string; totalSales: number; totalCommission: number; invoiceCount: number; growth: number; recommendation: string }>;
+    status: 'growing' | 'stable' | 'declining' | 'inactive' | 'at_risk';
     statusMessage: string;
+    criticalAlerts?: string[];
+    whyGrowing?: string[];
+    whyDeclining?: string[];
   };
 }
 
@@ -104,20 +107,21 @@ export function ClientPDFGenerator({ open, onOpenChange, client, invoices, analy
       yPos = 60;
 
       // ============ STATUS BANNER ============
-      const statusColor = statusColors[analytics.status];
-      doc.setFillColor(...statusColor);
+      const statusColor = statusColors[analytics.status] || statusColors['stable'];
+      doc.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
       doc.roundedRect(20, yPos, pageWidth - 40, 18, 3, 3, 'F');
       
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      const statusLabels = {
+      const statusLabels: Record<string, string> = {
         growing: '📈 Cliente en Crecimiento',
         stable: '✓ Cliente Estable',
-        declining: '⚠ Cliente en Riesgo',
+        declining: '⚠ Cliente en Declive',
+        at_risk: '🚨 Cliente en Riesgo',
         inactive: '⏸ Cliente Inactivo'
       };
-      doc.text(statusLabels[analytics.status], 28, yPos + 12);
+      doc.text(statusLabels[analytics.status] || 'Cliente', 28, yPos + 12);
       
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
@@ -176,68 +180,69 @@ export function ClientPDFGenerator({ open, onOpenChange, client, invoices, analy
         const growthBoxHeight = 40;
 
         const growthData = [
-          { label: 'Mensual', ...analytics.monthlyGrowth },
-          { label: 'Trimestral', ...analytics.quarterlyGrowth },
-          { label: 'Semestral', ...analytics.semesterGrowth },
+          { label: 'Mensual', salesGrowth: analytics.monthlyGrowth.salesGrowth, currentSales: analytics.monthlyGrowth.currentSales, previousSales: analytics.monthlyGrowth.previousSales },
+          { label: 'Trimestral', salesGrowth: analytics.quarterlyGrowth.salesGrowth, currentSales: analytics.quarterlyGrowth.currentSales, previousSales: analytics.quarterlyGrowth.previousSales },
+          { label: 'Semestral', salesGrowth: analytics.semesterGrowth.salesGrowth, currentSales: analytics.semesterGrowth.currentSales, previousSales: analytics.semesterGrowth.previousSales },
         ];
 
         growthData.forEach((data, idx) => {
           const x = 20 + idx * (growthBoxWidth + 5);
           
-          doc.setFillColor(...lightBg);
+          doc.setFillColor(lightBg[0], lightBg[1], lightBg[2]);
           doc.roundedRect(x, yPos, growthBoxWidth, growthBoxHeight, 3, 3, 'F');
           
           // Label
-          doc.setTextColor(...mutedColor);
+          doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
           doc.setFontSize(9);
           doc.setFont('helvetica', 'normal');
           doc.text(data.label, x + growthBoxWidth / 2, yPos + 10, { align: 'center' });
           
           // Growth percentage
-          const growthColor = data.growth >= 0 ? successColor : dangerColor;
-          doc.setTextColor(...growthColor);
+          const growthColor = data.salesGrowth >= 0 ? successColor : dangerColor;
+          doc.setTextColor(growthColor[0], growthColor[1], growthColor[2]);
           doc.setFontSize(16);
           doc.setFont('helvetica', 'bold');
-          const growthText = `${data.growth >= 0 ? '+' : ''}${data.growth.toFixed(1)}%`;
+          const growthText = `${data.salesGrowth >= 0 ? '+' : ''}${data.salesGrowth.toFixed(1)}%`;
           doc.text(growthText, x + growthBoxWidth / 2, yPos + 24, { align: 'center' });
           
           // Current vs Previous
-          doc.setTextColor(...mutedColor);
+          doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
           doc.setFontSize(7);
           doc.setFont('helvetica', 'normal');
-          doc.text(`$${formatNumber(data.current)} vs $${formatNumber(data.previous)}`, x + growthBoxWidth / 2, yPos + 34, { align: 'center' });
+          doc.text(`$${formatNumber(data.currentSales)} vs $${formatNumber(data.previousSales)}`, x + growthBoxWidth / 2, yPos + 34, { align: 'center' });
         });
 
         yPos += growthBoxHeight + 15;
       }
 
       // ============ PRODUCTS TABLE ============
-      if (sections.products && analytics.productBreakdown.length > 0) {
+      if (sections.products && analytics.productAnalysis && analytics.productAnalysis.length > 0) {
         if (yPos > pageHeight - 100) {
           doc.addPage();
           yPos = 20;
         }
 
-        doc.setTextColor(...primaryColor);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.setFontSize(13);
         doc.setFont('helvetica', 'bold');
         doc.text('Desglose por Producto', 20, yPos);
         yPos += 8;
 
         // Calculate percentages
-        const totalProductSales = analytics.productBreakdown.reduce((sum, p) => sum + p.sales, 0);
+        const totalProductSales = analytics.productAnalysis.reduce((sum, p) => sum + p.totalSales, 0);
 
         autoTable(doc, {
           startY: yPos,
-          head: [['Producto', 'Ventas', '% del Total', 'Comisión', 'Facturas']],
-          body: analytics.productBreakdown.map(product => {
-            const percentage = totalProductSales > 0 ? (product.sales / totalProductSales) * 100 : 0;
+          head: [['Producto', 'Ventas', '% del Total', 'Comisión', 'Tendencia']],
+          body: analytics.productAnalysis.slice(0, 10).map(product => {
+            const percentage = totalProductSales > 0 ? (product.totalSales / totalProductSales) * 100 : 0;
+            const trendText = product.growth > 0 ? `+${product.growth.toFixed(0)}%` : `${product.growth.toFixed(0)}%`;
             return [
               product.name,
-              `$${formatNumber(product.sales)}`,
+              `$${formatNumber(product.totalSales)}`,
               `${percentage.toFixed(1)}%`,
-              `$${formatNumber(product.commission)}`,
-              String(product.count)
+              `$${formatNumber(product.totalCommission)}`,
+              trendText
             ];
           }),
           theme: 'striped',
