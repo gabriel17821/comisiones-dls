@@ -46,45 +46,30 @@ interface Breakdown {
   color: string;
 }
 
-interface Calculations {
-  breakdown: Breakdown[];
-  restAmount: number;
-  restCommission: number;
-  totalCommission: number;
-}
-
-interface CalculatorViewProps {
+interface InvoiceCalculatorProps {
   products: Product[];
-  productAmounts: Record<string, number>;
-  totalInvoice: number;
-  setTotalInvoice: (value: number) => void;
-  calculations: Calculations;
   restPercentage: number;
   isLoading: boolean;
-  onProductChange: (id: string, value: number) => void;
-  onReset: () => void;
   onAddProduct: (name: string, percentage: number) => Promise<any>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<boolean>;
   onDeleteProduct: (id: string) => void;
   onUpdateRestPercentage: (value: number) => Promise<boolean>;
-  onSaveInvoice: (ncf: string, invoiceDate: string, clientId?: string) => Promise<any>;
+  onSaveInvoice: (ncf: string, invoiceDate: string, clientId?: string, productAmounts?: Record<string, number>) => Promise<any>;
   suggestedNcf?: number | null;
   lastInvoice?: Invoice;
   clients: Client[];
   onAddClient: (name: string, phone?: string, email?: string) => Promise<Client | null>;
   onDeleteClient?: (id: string) => Promise<boolean>;
   activeSeller?: Seller | null;
+  onReset: () => void;
+  productAmounts: Record<string, number>;
+  onProductChange: (id: string, value: number) => void;
 }
 
-export const CalculatorView = ({
+export const InvoiceCalculator = ({
   products,
-  productAmounts,
-  totalInvoice,
-  setTotalInvoice,
   restPercentage,
   isLoading,
-  onProductChange,
-  onReset,
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
@@ -95,7 +80,10 @@ export const CalculatorView = ({
   onAddClient,
   onDeleteClient,
   activeSeller,
-}: CalculatorViewProps) => {
+  onReset,
+  productAmounts,
+  onProductChange,
+}: InvoiceCalculatorProps) => {
   // Invoice header data
   const [ncfSuffix, setNcfSuffix] = useState('');
   const [invoiceDate, setInvoiceDate] = useState<Date>(new Date());
@@ -134,7 +122,7 @@ export const CalculatorView = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Calculate totals from product lines
+  // Calculate totals
   const calculations = useMemo(() => {
     const breakdown: Breakdown[] = [];
     let specialProductsTotal = 0;
@@ -156,16 +144,13 @@ export const CalculatorView = ({
       }
     });
 
-    // Rest is totalInvoice minus products
-    const restAmount = Math.max(0, totalInvoice - specialProductsTotal);
+    const totalInvoice = specialProductsTotal;
+    const restAmount = 0; // In this new mode, rest is calculated differently if needed
     const restCommission = restAmount * (restPercentage / 100);
     const totalCommission = breakdown.reduce((sum, item) => sum + item.commission, 0) + restCommission;
 
-    // Calculate actual invoice total (products + any additional rest input)
-    const invoiceTotal = specialProductsTotal > 0 ? specialProductsTotal : totalInvoice;
-
-    return { breakdown, restAmount, restCommission, totalCommission, specialProductsTotal, invoiceTotal };
-  }, [productLines, products, restPercentage, totalInvoice]);
+    return { breakdown, totalInvoice, restAmount, restCommission, totalCommission, specialProductsTotal };
+  }, [productLines, products, restPercentage]);
 
   const activeProductIds = productLines.map(l => l.productId);
   const filteredCatalog = products.filter(p => 
@@ -182,36 +167,34 @@ export const CalculatorView = ({
 
   const handleRemoveLine = (productId: string) => {
     setProductLines(prev => prev.filter(l => l.productId !== productId));
-    onProductChange(productId, 0);
   };
 
   const handleQuantityChange = (productId: string, quantity: number) => {
-    setProductLines(prev => {
-      const updated = prev.map(l => 
-        l.productId === productId ? { ...l, quantity } : l
-      );
-      // Update external productAmounts
-      const line = updated.find(l => l.productId === productId);
-      if (line) {
-        onProductChange(productId, line.quantity * line.unitPrice);
-      }
-      return updated;
-    });
+    setProductLines(prev => prev.map(l => 
+      l.productId === productId ? { ...l, quantity } : l
+    ));
   };
 
   const handleUnitPriceChange = (productId: string, unitPrice: number) => {
-    setProductLines(prev => {
-      const updated = prev.map(l => 
-        l.productId === productId ? { ...l, unitPrice } : l
-      );
-      // Update external productAmounts
-      const line = updated.find(l => l.productId === productId);
-      if (line) {
-        onProductChange(productId, line.quantity * unitPrice);
-      }
-      return updated;
-    });
+    setProductLines(prev => prev.map(l => 
+      l.productId === productId ? { ...l, unitPrice } : l
+    ));
+    // Also update productAmounts for backward compatibility
+    const line = productLines.find(l => l.productId === productId);
+    if (line) {
+      onProductChange(productId, line.quantity * unitPrice);
+    }
   };
+
+  // Sync productAmounts when lines change
+  useEffect(() => {
+    productLines.forEach(line => {
+      const lineTotal = line.quantity * line.unitPrice;
+      if (productAmounts[line.productId] !== lineTotal) {
+        onProductChange(line.productId, lineTotal);
+      }
+    });
+  }, [productLines]);
 
   const handleNcfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 4);
@@ -223,9 +206,8 @@ export const CalculatorView = ({
     setInvoiceDate(new Date());
     setSelectedClient(null);
     setProductLines([]);
-    setTotalInvoice(0);
     onReset();
-  }, [onReset, setTotalInvoice]);
+  }, [onReset]);
 
   const handleConfirmSave = async () => {
     setIsSaving(true);
@@ -233,7 +215,13 @@ export const CalculatorView = ({
     setShowSaveAnimation(true);
     const fullNcf = `${ncfPrefix}${ncfSuffix.padStart(4, '0')}`;
     
-    await onSaveInvoice(fullNcf, format(invoiceDate, 'yyyy-MM-dd'), selectedClient?.id);
+    // Build productAmounts from lines
+    const amounts: Record<string, number> = {};
+    productLines.forEach(line => {
+      amounts[line.productId] = line.quantity * line.unitPrice;
+    });
+    
+    await onSaveInvoice(fullNcf, format(invoiceDate, 'yyyy-MM-dd'), selectedClient?.id, amounts);
     setIsSaving(false);
   };
 
@@ -257,8 +245,7 @@ export const CalculatorView = ({
 
   const fullNcf = `${ncfPrefix}${ncfSuffix.padStart(4, '0')}`;
   const hasProducts = productLines.length > 0;
-  const actualTotal = calculations.specialProductsTotal > 0 ? calculations.specialProductsTotal : totalInvoice;
-  const hasValidData = ncfSuffix.length === 4 && selectedClient && actualTotal > 0;
+  const hasValidData = ncfSuffix.length === 4 && selectedClient && calculations.totalInvoice > 0;
 
   return (
     <div className="animate-fade-in">
@@ -461,14 +448,9 @@ export const CalculatorView = ({
                 <span className="h-6 w-6 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
                   {restPercentage}%
                 </span>
-                <span className="text-muted-foreground">Resto (Total - Productos): ${formatNumber(calculations.restAmount)}</span>
+                <span className="text-muted-foreground">Comisión resto (si aplica)</span>
               </div>
-              <div className="flex items-center gap-2">
-                {calculations.restAmount > 0 && (
-                  <span className="text-sm font-medium text-emerald-600">+${formatNumber(calculations.restCommission)}</span>
-                )}
-                <EditRestPercentageDialog currentValue={restPercentage} onUpdate={onUpdateRestPercentage} />
-              </div>
+              <EditRestPercentageDialog currentValue={restPercentage} onUpdate={onUpdateRestPercentage} />
             </div>
           </div>
 
@@ -477,7 +459,7 @@ export const CalculatorView = ({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Factura</p>
-                <p className="text-2xl font-bold text-foreground">${formatNumber(actualTotal)}</p>
+                <p className="text-2xl font-bold text-foreground">${formatNumber(calculations.totalInvoice)}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-muted-foreground">Mi Comisión</p>
@@ -504,10 +486,10 @@ export const CalculatorView = ({
         </Card>
 
         {/* Breakdown Table (if has products) */}
-        {hasProducts && actualTotal > 0 && (
+        {hasProducts && calculations.totalInvoice > 0 && (
           <div className="mt-6 animate-in slide-in-from-bottom-4">
             <BreakdownTable 
-              totalInvoice={actualTotal} 
+              totalInvoice={calculations.totalInvoice} 
               breakdown={calculations.breakdown} 
               restAmount={calculations.restAmount} 
               restPercentage={restPercentage} 
@@ -528,7 +510,7 @@ export const CalculatorView = ({
           ncf: fullNcf,
           invoiceDate: invoiceDate,
           clientName: selectedClient?.name || null,
-          totalAmount: actualTotal,
+          totalAmount: calculations.totalInvoice,
           breakdown: calculations.breakdown,
           restAmount: calculations.restAmount,
           restPercentage: restPercentage,
