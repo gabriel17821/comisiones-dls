@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend, ComposedChart, Line } from 'recharts';
-import { TrendingUp, TrendingDown, Users, Package, DollarSign, FileText, Download, Upload, Calendar, ArrowUpRight, ArrowDownRight, Minus, Target, Award, AlertTriangle, UserCheck, Percent } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Package, DollarSign, FileText, Download, Upload, Calendar, ArrowUpRight, ArrowDownRight, Minus, Target, Award, AlertTriangle, UserCheck, Eye } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Invoice } from '@/hooks/useInvoices';
@@ -14,8 +14,13 @@ import { Seller } from '@/hooks/useSellers';
 import { useRealAnalytics } from '@/hooks/useRealAnalytics';
 import { formatNumber, formatCurrency } from '@/lib/formatters';
 import { RealPDFGenerator } from './RealPDFGenerator';
+import { ExcelImporter } from './ExcelImporter';
+import { ClientDetailView } from './ClientDetailView';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+
+type PeriodFilter = '1m' | '3m' | '6m' | '1y' | 'all';
 
 interface RealAnalyticsDashboardProps {
   invoices: Invoice[];
@@ -27,7 +32,12 @@ interface RealAnalyticsDashboardProps {
 
 export function RealAnalyticsDashboard({ invoices, clients, products, sellers, activeSeller }: RealAnalyticsDashboardProps) {
   const [showPdfGenerator, setShowPdfGenerator] = useState(false);
+  const [showExcelImporter, setShowExcelImporter] = useState(false);
   const [viewMode, setViewMode] = useState<'personal' | 'general'>('personal');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('6m');
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  
+  const { bulkImport } = useAnalytics();
   
   const analytics = useRealAnalytics(
     invoices, 
@@ -62,6 +72,13 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
     );
   };
 
+  const handleClientClick = (clientId: string) => {
+    const client = clients.find(c => c.id === clientId);
+    if (client) {
+      setSelectedClient(client);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -75,7 +92,20 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
             }
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={periodFilter} onValueChange={(v: PeriodFilter) => setPeriodFilter(v)}>
+            <SelectTrigger className="w-40">
+              <Calendar className="h-4 w-4 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1m">Último mes</SelectItem>
+              <SelectItem value="3m">Último trimestre</SelectItem>
+              <SelectItem value="6m">Últimos 6 meses</SelectItem>
+              <SelectItem value="1y">Último año</SelectItem>
+              <SelectItem value="all">Todo</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={viewMode} onValueChange={(v: any) => setViewMode(v)}>
             <SelectTrigger className="w-44">
               <UserCheck className="h-4 w-4 mr-2" />
@@ -86,7 +116,10 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
               <SelectItem value="general">Negocio General</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => setShowPdfGenerator(true)}>
+          <Button variant="outline" size="icon" onClick={() => setShowExcelImporter(true)} title="Importar CSV/Excel">
+            <Upload className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => setShowPdfGenerator(true)} title="Exportar PDF">
             <Download className="h-4 w-4" />
           </Button>
         </div>
@@ -397,6 +430,7 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
               <CardTitle className="text-lg flex items-center gap-2">
                 <Award className="h-5 w-5 text-amber-500" />
                 Ranking de Clientes
+                <span className="text-sm font-normal text-muted-foreground ml-2">(Clic para ver detalles)</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -412,11 +446,16 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
                       <th className="text-right py-2 px-3 font-medium">Comisión</th>
                       <th className="text-right py-2 px-3 font-medium">Este Mes</th>
                       <th className="text-right py-2 px-3 font-medium">Tendencia</th>
+                      <th className="text-center py-2 px-3 font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {analytics.clientMetrics.slice(0, 15).map((client, idx) => (
-                      <tr key={client.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <tr 
+                        key={client.id} 
+                        className="border-b last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
+                        onClick={() => handleClientClick(client.id)}
+                      >
                         <td className="py-3 px-3">
                           <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
                             idx === 0 ? 'bg-amber-500/20 text-amber-600' :
@@ -434,6 +473,11 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
                         <td className="py-3 px-3 text-right text-emerald-600">${formatNumber(client.totalCommission)}</td>
                         <td className="py-3 px-3 text-right">${formatNumber(client.currentMonthSales)}</td>
                         <td className="py-3 px-3 text-right">{renderChangeIndicator(client.trend)}</td>
+                        <td className="py-3 px-3 text-center">
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -537,7 +581,11 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
                 ) : (
                   <div className="space-y-3">
                     {analytics.growingClients.map(c => (
-                      <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                      <div 
+                        key={c.id} 
+                        className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 cursor-pointer hover:bg-emerald-500/10 transition-colors"
+                        onClick={() => handleClientClick(c.id)}
+                      >
                         <div>
                           <p className="font-medium">{c.name}</p>
                           <p className="text-xs text-muted-foreground">{c.invoiceCount} facturas</p>
@@ -569,7 +617,11 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
                 ) : (
                   <div className="space-y-3">
                     {analytics.decliningClients.map(c => (
-                      <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
+                      <div 
+                        key={c.id} 
+                        className="flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 cursor-pointer hover:bg-amber-500/10 transition-colors"
+                        onClick={() => handleClientClick(c.id)}
+                      >
                         <div>
                           <p className="font-medium">{c.name}</p>
                           <p className="text-xs text-muted-foreground">{c.invoiceCount} facturas</p>
@@ -660,6 +712,25 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
         viewMode={viewMode}
         sellerName={activeSeller?.name}
       />
+
+      {/* Excel Importer */}
+      <ExcelImporter
+        open={showExcelImporter}
+        onOpenChange={setShowExcelImporter}
+        onImport={bulkInsert}
+        clients={clients}
+        products={products}
+      />
+
+      {/* Client Detail View */}
+      {selectedClient && (
+        <ClientDetailView
+          open={!!selectedClient}
+          onOpenChange={(open) => !open && setSelectedClient(null)}
+          client={selectedClient}
+          invoices={invoices}
+        />
+      )}
     </div>
   );
 }
