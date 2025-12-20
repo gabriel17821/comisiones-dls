@@ -14,7 +14,7 @@ import { Statistics } from "@/components/Statistics";
 import { MonthlyBreakdown } from "@/components/MonthlyBreakdown";
 import { SellerManager } from "@/components/SellerManager";
 import { SettingsPage } from "@/components/SettingsPage";
-import { AnalyticsDashboard } from "@/components/analytics";
+import { RealAnalyticsDashboard } from "@/components/analytics";
 const Index = () => {
   const { products, loading: productsLoading, addProduct, updateProduct, deleteProduct } = useProducts();
   const { restPercentage, loading: settingsLoading, updateRestPercentage, getNextNcfNumber, updateLastNcfNumber } = useSettings();
