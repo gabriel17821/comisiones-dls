@@ -717,7 +717,7 @@ export function RealAnalyticsDashboard({ invoices, clients, products, sellers, a
       <ExcelImporter
         open={showExcelImporter}
         onOpenChange={setShowExcelImporter}
-        onImport={bulkInsert}
+        onImport={bulkImport}
         clients={clients}
         products={products}
       />
