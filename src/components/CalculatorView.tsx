@@ -5,7 +5,7 @@ import { RotateCcw, Calculator, Package, CalendarIcon, FileText, User, Save, Ref
 import { EditRestPercentageDialog } from "@/components/EditRestPercentageDialog";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import { ProductCatalogDialog } from "@/components/ProductCatalogDialog";
-import { ClientSelector } from "@/components/ClientSelector";
+import { ClientSearchSelect } from "@/components/ClientSearchSelect";
 import { SaveSuccessAnimation } from "@/components/SaveSuccessAnimation";
 import { InvoicePreviewDialog } from "@/components/InvoicePreviewDialog";
 import { InvoiceLineItem } from "@/components/InvoiceLineItem";
@@ -308,36 +308,109 @@ export const CalculatorView = ({
                 </Popover>
               </div>
 
-              {/* NCF */}
+              {/* NCF - Campo completo */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">NCF</Label>
-                <div className="flex items-center rounded-lg border border-border bg-background overflow-hidden h-10">
-                  <span className="px-2 text-sm font-mono text-muted-foreground bg-muted border-r border-border">{ncfPrefix}</span>
-                  <Input 
-                    value={ncfSuffix} 
-                    onChange={handleNcfChange} 
-                    placeholder="0000" 
-                    className="border-0 text-sm font-mono font-bold text-center focus-visible:ring-0 h-full" 
-                    maxLength={4} 
-                    inputMode="numeric" 
-                  />
-                </div>
+                <Input 
+                  value={fullNcf} 
+                  onChange={(e) => {
+                    const val = e.target.value.toUpperCase();
+                    // Extraer solo los últimos 4 dígitos para el sufijo
+                    if (val.startsWith('B01')) {
+                      const suffix = val.slice(-4).replace(/\D/g, '');
+                      setNcfSuffix(suffix);
+                    }
+                  }}
+                  placeholder="B0100000000" 
+                  className="h-10 text-sm font-mono font-bold tracking-wider" 
+                />
               </div>
-
-              {/* Client */}
+              {/* Client - Simplified with search */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Cliente</Label>
-                <ClientSelector 
-                  clients={clients} 
-                  selectedClient={selectedClient} 
-                  onSelectClient={setSelectedClient} 
-                  onAddClient={onAddClient} 
-                  onDeleteClient={onDeleteClient}
+                <ClientSearchSelect
+                  clients={clients}
+                  value={selectedClient?.id || ''}
+                  onChange={(clientId) => {
+                    const client = clients.find(c => c.id === clientId);
+                    setSelectedClient(client || null);
+                  }}
                 />
               </div>
             </div>
           </div>
 
+          {/* Add Product Button - ARRIBA */}
+          <div className="px-4 py-3 border-b border-border bg-muted/10">
+            <div ref={searchRef} className="relative">
+              {showSearch ? (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Buscar producto..."
+                      className="pl-10 pr-10"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => { setShowSearch(false); setSearchTerm(''); }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  
+                  {searchTerm && (
+                    <div className="border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto bg-popover">
+                      {filteredCatalog.length > 0 ? (
+                        filteredCatalog.map(product => (
+                          <button
+                            key={product.id}
+                            onClick={() => handleAddLine(product.id)}
+                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
+                          >
+                            <span 
+                              className="h-6 w-6 rounded flex items-center justify-center text-[10px] font-bold text-primary-foreground shrink-0"
+                              style={{ backgroundColor: product.color }}
+                            >
+                              {product.percentage}%
+                            </span>
+                            <span className="text-sm font-medium flex-1">{product.name}</span>
+                            <Plus className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                        ))
+                      ) : (
+                        <div className="p-3 text-center text-sm text-muted-foreground">
+                          No encontrado
+                        </div>
+                      )}
+                      <button
+                        onClick={() => { setNewProductName(searchTerm); setShowAddDialog(true); setShowSearch(false); }}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-primary/10 border-t border-border transition-colors text-left"
+                      >
+                        <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center text-primary">
+                          <Plus className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm font-semibold text-primary">Crear "{searchTerm}"</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full border-dashed h-10"
+                  onClick={() => setShowSearch(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar Producto
+                </Button>
+              )}
+            </div>
+          </div>
           {/* Product Lines Header */}
           <div className="px-4 py-3 border-b border-border bg-muted/20">
             <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -374,82 +447,12 @@ export const CalculatorView = ({
                 })}
 
                 {productLines.length === 0 && (
-                  <div className="text-center py-12 border-2 border-dashed border-muted rounded-xl bg-muted/10">
-                    <Package className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+                  <div className="text-center py-8 border-2 border-dashed border-muted rounded-xl bg-muted/10">
+                    <Package className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
                     <p className="text-sm font-medium text-muted-foreground">No hay productos en esta factura</p>
-                    <p className="text-xs text-muted-foreground mt-1">Usa el botón de abajo para agregar líneas</p>
+                    <p className="text-xs text-muted-foreground mt-1">Usa el botón de arriba para agregar productos</p>
                   </div>
                 )}
-
-                {/* Add Product Button / Search */}
-                <div ref={searchRef} className="relative mt-4">
-                  {showSearch ? (
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          type="text"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          placeholder="Buscar producto..."
-                          className="pl-10 pr-10"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => { setShowSearch(false); setSearchTerm(''); }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                      
-                      {searchTerm && (
-                        <div className="border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto bg-popover">
-                          {filteredCatalog.length > 0 ? (
-                            filteredCatalog.map(product => (
-                              <button
-                                key={product.id}
-                                onClick={() => handleAddLine(product.id)}
-                                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
-                              >
-                                <span 
-                                  className="h-6 w-6 rounded flex items-center justify-center text-[10px] font-bold text-primary-foreground shrink-0"
-                                  style={{ backgroundColor: product.color }}
-                                >
-                                  {product.percentage}%
-                                </span>
-                                <span className="text-sm font-medium flex-1">{product.name}</span>
-                                <Plus className="h-4 w-4 text-muted-foreground" />
-                              </button>
-                            ))
-                          ) : (
-                            <div className="p-3 text-center text-sm text-muted-foreground">
-                              No encontrado
-                            </div>
-                          )}
-                          <button
-                            onClick={() => { setNewProductName(searchTerm); setShowAddDialog(true); setShowSearch(false); }}
-                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-primary/10 border-t border-border transition-colors text-left"
-                          >
-                            <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center text-primary">
-                              <Plus className="h-4 w-4" />
-                            </div>
-                            <span className="text-sm font-semibold text-primary">Crear "{searchTerm}"</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      className="w-full border-dashed h-12"
-                      onClick={() => setShowSearch(true)}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Agregar Producto
-                    </Button>
-                  )}
-                </div>
               </>
             )}
           </div>

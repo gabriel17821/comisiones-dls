@@ -14,7 +14,7 @@ import { Statistics } from "@/components/Statistics";
 import { MonthlyBreakdown } from "@/components/MonthlyBreakdown";
 import { SellerManager } from "@/components/SellerManager";
 import { SettingsPage } from "@/components/SettingsPage";
-import { RealAnalyticsDashboard } from "@/components/analytics";
+import { VisitPrepDashboard } from "@/components/analytics/VisitPrepDashboard";
 const Index = () => {
   const { products, loading: productsLoading, addProduct, updateProduct, deleteProduct } = useProducts();
   const { restPercentage, loading: settingsLoading, updateRestPercentage, getNextNcfNumber, updateLastNcfNumber } = useSettings();
@@ -226,12 +226,10 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="analytics">
-            <RealAnalyticsDashboard 
+            <VisitPrepDashboard 
               invoices={invoices}
               clients={clients}
               products={products}
-              sellers={sellers}
-              activeSeller={activeSeller}
             />
           </TabsContent>
         </Tabs>
