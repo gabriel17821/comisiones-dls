@@ -18,9 +18,11 @@ import { VisitPrepDashboard } from "@/components/analytics/VisitPrepDashboard";
 const Index = () => {
   const { products, loading: productsLoading, addProduct, updateProduct, deleteProduct } = useProducts();
   const { restPercentage, loading: settingsLoading, updateRestPercentage, getNextNcfNumber, updateLastNcfNumber } = useSettings();
-  const { invoices, loading: invoicesLoading, saveInvoice, deleteInvoice, updateInvoice, refetch: refetchInvoices } = useInvoices();
   const { clients, loading: clientsLoading, addClient, deleteClient, refetch: refetchClients } = useClients();
   const { sellers, activeSeller, setActiveSeller, addSeller, updateSeller, deleteSeller, setDefaultSeller } = useSellers();
+  
+  // Invoices filtradas por el vendedor activo
+  const { invoices, loading: invoicesLoading, saveInvoice, deleteInvoice, updateInvoice, refetch: refetchInvoices } = useInvoices(activeSeller?.id);
   const { data: analyticsData, bulkImport } = useAnalytics();
 
   const [totalInvoice, setTotalInvoice] = useState(0);
@@ -95,7 +97,7 @@ const Index = () => {
 
     const result = await saveInvoice(
       ncf, invoiceDate, totalReal, calculations.restAmount, restPercentage,
-      calculations.restCommission, calculations.totalCommission, productBreakdown, clientId
+      calculations.restCommission, calculations.totalCommission, productBreakdown, clientId, activeSeller?.id
     );
 
     if (result) {
@@ -181,14 +183,12 @@ const Index = () => {
               totalInvoice={totalInvoice}
               setTotalInvoice={setTotalInvoice}
               calculations={calculations}
-              restPercentage={restPercentage}
               isLoading={isLoading}
               onProductChange={handleProductChange}
               onReset={handleReset}
               onAddProduct={addProduct}
               onUpdateProduct={updateProduct}
               onDeleteProduct={deleteProduct}
-              onUpdateRestPercentage={updateRestPercentage}
               onSaveInvoice={handleSaveInvoice}
               suggestedNcf={suggestedNcf}
               lastInvoice={lastInvoice}

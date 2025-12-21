@@ -25,15 +25,24 @@ export interface Invoice {
   products?: InvoiceProduct[];
 }
 
-export const useInvoices = () => {
+export const useInvoices = (sellerId?: string | null) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchInvoices = async () => {
-    const { data: invoicesData, error: invoicesError } = await supabase
+    setLoading(true);
+    
+    let query = supabase
       .from('invoices')
       .select('*')
       .order('created_at', { ascending: false });
+    
+    // Filtrar por vendedor si se proporciona
+    if (sellerId) {
+      query = query.eq('seller_id', sellerId);
+    }
+    
+    const { data: invoicesData, error: invoicesError } = await query;
     
     if (invoicesError) {
       toast.error('Error al cargar facturas');
@@ -59,7 +68,7 @@ export const useInvoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, []);
+  }, [sellerId]);
 
   const saveInvoice = async (
     ncf: string,
