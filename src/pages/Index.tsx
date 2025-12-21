@@ -22,7 +22,7 @@ const Index = () => {
   const { sellers, activeSeller, setActiveSeller, addSeller, updateSeller, deleteSeller, setDefaultSeller } = useSellers();
   
   // Invoices filtradas por el vendedor activo
-  const { invoices, loading: invoicesLoading, saveInvoice, deleteInvoice, updateInvoice, refetch: refetchInvoices } = useInvoices(activeSeller?.id);
+  const { invoices, loading: invoicesLoading, saveInvoice, deleteInvoice, updateInvoice, saveBulkInvoices, refetch: refetchInvoices } = useInvoices(activeSeller?.id);
   const { data: analyticsData, bulkImport } = useAnalytics();
 
   const [totalInvoice, setTotalInvoice] = useState(0);
@@ -80,24 +80,17 @@ const Index = () => {
     setProductAmounts((prev) => ({ ...prev, [id]: value }));
   };
 
-  const handleSaveInvoice = async (ncf: string, invoiceDate: string, clientId?: string) => {
-    const productBreakdown = calculations.breakdown.map(b => ({
-      name: b.name,
-      amount: b.amount,
-      percentage: b.percentage,
-      commission: b.commission,
-    }));
-
-    // FIX: Calculamos el total real sumando el total digitado (resto) + productos
-    const specialProductsTotal = Object.values(productAmounts).reduce(
-      (sum, amount) => sum + amount,
-      0
-    );
-    const totalReal = totalInvoice + specialProductsTotal;
-
+  const handleSaveInvoice = async (
+    ncf: string, 
+    invoiceDate: string, 
+    products: { name: string; amount: number; percentage: number; commission: number }[],
+    totalAmount: number,
+    totalCommission: number,
+    clientId?: string
+  ) => {
     const result = await saveInvoice(
-      ncf, invoiceDate, totalReal, calculations.restAmount, restPercentage,
-      calculations.restCommission, calculations.totalCommission, productBreakdown, clientId, activeSeller?.id
+      ncf, invoiceDate, totalAmount, 0, 0,
+      0, totalCommission, products, clientId, activeSeller?.id
     );
 
     if (result) {
@@ -106,6 +99,42 @@ const Index = () => {
       handleReset();
     }
     return result;
+  };
+
+  const handleBulkImport = async (importedInvoices: {
+    ncfSuffix: string;
+    invoiceDate: Date;
+    clientId?: string;
+    lines: { productId: string; quantity: number; unitPrice: number }[];
+  }[]) => {
+    const preparedInvoices = importedInvoices.map(inv => {
+      const productData = inv.lines.map(line => {
+        const product = products.find(p => p.id === line.productId);
+        const amount = line.quantity * line.unitPrice;
+        const commission = amount * ((product?.percentage || 0) / 100);
+        return {
+          name: product?.name || 'Producto',
+          amount,
+          percentage: product?.percentage || 0,
+          commission,
+        };
+      });
+      
+      const totalAmount = productData.reduce((sum, p) => sum + p.amount, 0);
+      const totalCommission = productData.reduce((sum, p) => sum + p.commission, 0);
+      
+      return {
+        ncf: `B010000${inv.ncfSuffix}`,
+        invoiceDate: inv.invoiceDate.toISOString().split('T')[0],
+        totalAmount,
+        totalCommission,
+        products: productData,
+        clientId: inv.clientId,
+        sellerId: activeSeller?.id,
+      };
+    });
+
+    await saveBulkInvoices(preparedInvoices);
   };
 
   const lastInvoice = invoices.length > 0 ? invoices[0] : undefined;
@@ -190,6 +219,7 @@ const Index = () => {
               onUpdateProduct={updateProduct}
               onDeleteProduct={deleteProduct}
               onSaveInvoice={handleSaveInvoice}
+              onBulkImport={handleBulkImport}
               suggestedNcf={suggestedNcf}
               lastInvoice={lastInvoice}
               clients={clients}

@@ -6,7 +6,7 @@ import { formatNumber } from "@/lib/formatters";
 
 interface InvoiceLineItemProps {
   productName: string;
-  productColor: string;
+  productColor?: string;
   percentage: number;
   quantity: number;
   unitPrice: number;
@@ -58,12 +58,8 @@ export const InvoiceLineItem = ({
 
   return (
     <div className="group grid grid-cols-12 gap-2 items-center p-3 rounded-lg bg-card border border-border hover:border-primary/30 transition-all">
-      {/* Product Name with color indicator */}
+      {/* Product Name */}
       <div className="col-span-4 flex items-center gap-2 min-w-0">
-        <div 
-          className="h-8 w-1 rounded-full shrink-0"
-          style={{ backgroundColor: productColor }}
-        />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground truncate">{productName}</p>
           <p className="text-xs text-muted-foreground">{percentage}% comisión</p>
@@ -101,7 +97,7 @@ export const InvoiceLineItem = ({
       <div className="col-span-2 text-right">
         <p className="text-sm font-bold text-foreground">${formatNumber(lineTotal)}</p>
         {lineTotal > 0 && (
-          <p className="text-xs font-semibold" style={{ color: productColor }}>
+          <p className="text-xs font-semibold text-emerald-600">
             +${formatNumber(commission)}
           </p>
         )}

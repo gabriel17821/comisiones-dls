@@ -244,5 +244,84 @@ export const useInvoices = (sellerId?: string | null) => {
     return invoice;
   };
 
-  return { invoices, loading, saveInvoice, updateInvoice, deleteInvoice, refetch: fetchInvoices };
+  const saveBulkInvoices = async (
+    invoices: {
+      ncf: string;
+      invoiceDate: string;
+      totalAmount: number;
+      totalCommission: number;
+      products: { name: string; amount: number; percentage: number; commission: number }[];
+      clientId?: string;
+      sellerId?: string;
+    }[]
+  ) => {
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const inv of invoices) {
+      // Check if NCF already exists
+      const { data: existing } = await supabase
+        .from('invoices')
+        .select('id')
+        .eq('ncf', inv.ncf)
+        .maybeSingle();
+      
+      if (existing) {
+        failCount++;
+        continue;
+      }
+
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert({
+          ncf: inv.ncf,
+          invoice_date: inv.invoiceDate,
+          total_amount: inv.totalAmount,
+          rest_amount: 0,
+          rest_percentage: 0,
+          rest_commission: 0,
+          total_commission: inv.totalCommission,
+          client_id: inv.clientId || null,
+          seller_id: inv.sellerId || null,
+        })
+        .select()
+        .single();
+      
+      if (invoiceError) {
+        console.error(invoiceError);
+        failCount++;
+        continue;
+      }
+
+      // Save product breakdown
+      const productInserts = inv.products
+        .filter(p => p.amount > 0)
+        .map(p => ({
+          invoice_id: invoice.id,
+          product_name: p.name,
+          amount: p.amount,
+          percentage: p.percentage,
+          commission: p.commission,
+        }));
+
+      if (productInserts.length > 0) {
+        await supabase
+          .from('invoice_products')
+          .insert(productInserts);
+      }
+
+      successCount++;
+    }
+
+    if (failCount > 0) {
+      toast.warning(`${successCount} facturas guardadas, ${failCount} con errores o duplicadas`);
+    } else {
+      toast.success(`${successCount} facturas guardadas correctamente`);
+    }
+
+    fetchInvoices();
+    return successCount;
+  };
+
+  return { invoices, loading, saveInvoice, updateInvoice, deleteInvoice, saveBulkInvoices, refetch: fetchInvoices };
 };

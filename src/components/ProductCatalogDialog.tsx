@@ -70,9 +70,9 @@ export const ProductCatalogDialog = ({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
-          <Settings2 className="h-3.5 w-3.5" />
-          <span className="text-xs">Catálogo</span>
+        <Button variant="secondary" size="sm" className="gap-2 bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0">
+          <Settings2 className="h-4 w-4" />
+          <span className="hidden sm:inline">Catálogo</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
@@ -151,10 +151,6 @@ export const ProductCatalogDialog = ({
                     </>
                   ) : (
                     <>
-                      <span
-                        className="h-3 w-3 rounded-full shrink-0"
-                        style={{ backgroundColor: product.color }}
-                      />
                       <span className="flex-1 font-medium text-foreground">{product.name}</span>
                       <span className="px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-bold">
                         {product.percentage}%
