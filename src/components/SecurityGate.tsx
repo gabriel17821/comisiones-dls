@@ -9,8 +9,9 @@ import { toast } from 'sonner';
 // CONFIGURACIÓN DE SEGURIDAD
 const MAX_ATTEMPTS = 3;
 const TIME_WINDOW = 60 * 60 * 1000; // 1 hora en milisegundos
+const AUTH_EXPIRY_DAYS = 30; // Duración de la sesión en días
 // NOTA: Cambia esto por tu contraseña deseada o usa una variable de entorno
-const CORRECT_PASSWORD = import.meta.env.VITE_APP_PASSWORD || 'Gabriel17'; 
+const CORRECT_PASSWORD = import.meta.env.VITE_APP_PASSWORD || 'Gabriel17';
 
 interface SecurityGateProps {
   children: React.ReactNode;
@@ -24,8 +25,26 @@ export const SecurityGate = ({ children }: SecurityGateProps) => {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
 
   useEffect(() => {
-    // 1. Verificar si ya está autenticado
+    // 1. Verificar si ya está autenticado y no ha expirado
     const auth = localStorage.getItem('app_auth_authenticated');
+    const authTimestamp = localStorage.getItem('app_auth_timestamp');
+    
+    // Verificar expiración (30 días por defecto)
+    if (auth === 'true' && authTimestamp) {
+      const timestamp = parseInt(authTimestamp, 10);
+      const expiryTime = timestamp + (AUTH_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+      const now = Date.now();
+      
+      if (now < expiryTime) {
+        setIsAuthenticated(true);
+        setLoading(false);
+        return;
+      } else {
+        // Sesión expirada, limpiar
+        localStorage.removeItem('app_auth_authenticated');
+        localStorage.removeItem('app_auth_timestamp');
+      }
+    }
     
     // 2. Cargar intentos fallidos previos
     const storedAttempts = JSON.parse(localStorage.getItem('app_auth_attempts') || '[]');
@@ -39,17 +58,12 @@ export const SecurityGate = ({ children }: SecurityGateProps) => {
     // Verificar si está bloqueado actualmente
     if (validAttempts.length >= MAX_ATTEMPTS) {
       // El bloqueo dura 1 hora desde el intento que provocó el exceso
-      // (o simplificado: 1 hora desde el intento más antiguo válido)
       const oldestAttempt = Math.min(...validAttempts);
       const lockTime = oldestAttempt + TIME_WINDOW;
       
       if (now < lockTime) {
         setLockedUntil(lockTime);
       }
-    }
-
-    if (auth === 'true') {
-      setIsAuthenticated(true);
     }
     
     setLoading(false);
@@ -66,9 +80,10 @@ export const SecurityGate = ({ children }: SecurityGateProps) => {
     }
 
     if (password === CORRECT_PASSWORD) {
-      // ÉXITO
+      // ÉXITO - Guardar autenticación con timestamp para persistencia
       setIsAuthenticated(true);
       localStorage.setItem('app_auth_authenticated', 'true');
+      localStorage.setItem('app_auth_timestamp', Date.now().toString());
       localStorage.removeItem('app_auth_attempts'); // Resetear intentos al entrar
       toast.success('Acceso concedido');
     } else {

@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RotateCcw, Calculator, Package, CalendarIcon, FileText, User, Save, RefreshCw, DollarSign, Plus, Search, X, Settings } from "lucide-react";
-import { EditRestPercentageDialog } from "@/components/EditRestPercentageDialog";
+import { RotateCcw, Calculator, Package, CalendarIcon, FileText, User, Save, RefreshCw, DollarSign, Plus, Search, X, Settings, Upload, Download } from "lucide-react";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import { ProductCatalogDialog } from "@/components/ProductCatalogDialog";
 import { ClientSearchSelect } from "@/components/ClientSearchSelect";
 import { SaveSuccessAnimation } from "@/components/SaveSuccessAnimation";
 import { InvoicePreviewDialog } from "@/components/InvoicePreviewDialog";
 import { InvoiceLineItem } from "@/components/InvoiceLineItem";
+import { CSVInvoiceImporter } from "@/components/CSVInvoiceImporter";
 import { formatNumber, formatCurrency } from "@/lib/formatters";
 import { format } from "date-fns";
 import { es } from 'date-fns/locale';
@@ -59,14 +59,12 @@ interface CalculatorViewProps {
   totalInvoice: number;
   setTotalInvoice: (value: number) => void;
   calculations: Calculations;
-  restPercentage: number;
   isLoading: boolean;
   onProductChange: (id: string, value: number) => void;
   onReset: () => void;
   onAddProduct: (name: string, percentage: number) => Promise<any>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<boolean>;
   onDeleteProduct: (id: string) => void;
-  onUpdateRestPercentage: (value: number) => Promise<boolean>;
   onSaveInvoice: (ncf: string, invoiceDate: string, clientId?: string) => Promise<any>;
   suggestedNcf?: number | null;
   lastInvoice?: Invoice;
@@ -81,14 +79,12 @@ export const CalculatorView = ({
   productAmounts,
   totalInvoice,
   setTotalInvoice,
-  restPercentage,
   isLoading,
   onProductChange,
   onReset,
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
-  onUpdateRestPercentage,
   onSaveInvoice,
   suggestedNcf,
   clients,
@@ -134,10 +130,10 @@ export const CalculatorView = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Calculate totals from product lines
+  // Calculate totals from product lines (sin resto)
   const calculations = useMemo(() => {
     const breakdown: Breakdown[] = [];
-    let specialProductsTotal = 0;
+    let invoiceTotal = 0;
 
     productLines.forEach(line => {
       const product = products.find(p => p.id === line.productId);
@@ -152,20 +148,14 @@ export const CalculatorView = ({
           commission,
           color: product.color,
         });
-        specialProductsTotal += lineTotal;
+        invoiceTotal += lineTotal;
       }
     });
 
-    // Rest is totalInvoice minus products
-    const restAmount = Math.max(0, totalInvoice - specialProductsTotal);
-    const restCommission = restAmount * (restPercentage / 100);
-    const totalCommission = breakdown.reduce((sum, item) => sum + item.commission, 0) + restCommission;
+    const totalCommission = breakdown.reduce((sum, item) => sum + item.commission, 0);
 
-    // Calculate actual invoice total (products + any additional rest input)
-    const invoiceTotal = specialProductsTotal > 0 ? specialProductsTotal : totalInvoice;
-
-    return { breakdown, restAmount, restCommission, totalCommission, specialProductsTotal, invoiceTotal };
-  }, [productLines, products, restPercentage, totalInvoice]);
+    return { breakdown, restAmount: 0, restCommission: 0, totalCommission, specialProductsTotal: invoiceTotal, invoiceTotal };
+  }, [productLines, products]);
 
   const activeProductIds = productLines.map(l => l.productId);
   const filteredCatalog = products.filter(p => 
@@ -280,12 +270,31 @@ export const CalculatorView = ({
                   </p>
                 </div>
               </div>
-              <ProductCatalogDialog 
-                products={products}
-                onUpdateProduct={onUpdateProduct}
-                onDeleteProduct={onDeleteProduct}
-                onAddProduct={onAddProduct}
-              />
+              <div className="flex items-center gap-2">
+                <CSVInvoiceImporter 
+                  products={products}
+                  clients={clients}
+                  onImport={(data) => {
+                    setNcfSuffix(data.ncfSuffix);
+                    setInvoiceDate(data.invoiceDate);
+                    if (data.clientId) {
+                      const client = clients.find(c => c.id === data.clientId);
+                      setSelectedClient(client || null);
+                    }
+                    setProductLines(data.lines.map(l => ({
+                      productId: l.productId,
+                      quantity: l.quantity,
+                      unitPrice: l.unitPrice
+                    })));
+                  }}
+                />
+                <ProductCatalogDialog 
+                  products={products}
+                  onUpdateProduct={onUpdateProduct}
+                  onDeleteProduct={onDeleteProduct}
+                  onAddProduct={onAddProduct}
+                />
+              </div>
             </div>
           </div>
 
@@ -457,24 +466,6 @@ export const CalculatorView = ({
             )}
           </div>
 
-          {/* Rest Section */}
-          <div className="px-4 pb-4">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="h-6 w-6 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                  {restPercentage}%
-                </span>
-                <span className="text-muted-foreground">Resto (Total - Productos): ${formatNumber(calculations.restAmount)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {calculations.restAmount > 0 && (
-                  <span className="text-sm font-medium text-emerald-600">+${formatNumber(calculations.restCommission)}</span>
-                )}
-                <EditRestPercentageDialog currentValue={restPercentage} onUpdate={onUpdateRestPercentage} />
-              </div>
-            </div>
-          </div>
-
           {/* Totals */}
           <div className="border-t border-border bg-muted/20 p-4">
             <div className="flex items-center justify-between">
@@ -512,9 +503,9 @@ export const CalculatorView = ({
             <BreakdownTable 
               totalInvoice={actualTotal} 
               breakdown={calculations.breakdown} 
-              restAmount={calculations.restAmount} 
-              restPercentage={restPercentage} 
-              restCommission={calculations.restCommission} 
+              restAmount={0} 
+              restPercentage={0} 
+              restCommission={0} 
               totalCommission={calculations.totalCommission} 
             />
           </div>
@@ -533,9 +524,9 @@ export const CalculatorView = ({
           clientName: selectedClient?.name || null,
           totalAmount: actualTotal,
           breakdown: calculations.breakdown,
-          restAmount: calculations.restAmount,
-          restPercentage: restPercentage,
-          restCommission: calculations.restCommission,
+          restAmount: 0,
+          restPercentage: 0,
+          restCommission: 0,
           totalCommission: calculations.totalCommission,
         }}
       />
