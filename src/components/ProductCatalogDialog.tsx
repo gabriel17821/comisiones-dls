@@ -18,6 +18,7 @@ interface ProductCatalogDialogProps {
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<boolean>;
   onDeleteProduct: (id: string) => void;
   onAddProduct: (name: string, percentage: number) => Promise<any>;
+  trigger?: React.ReactNode;
 }
 
 export const ProductCatalogDialog = ({
@@ -25,6 +26,7 @@ export const ProductCatalogDialog = ({
   onUpdateProduct,
   onDeleteProduct,
   onAddProduct,
+  trigger,
 }: ProductCatalogDialogProps) => {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,10 +72,12 @@ export const ProductCatalogDialog = ({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="secondary" size="sm" className="gap-2 bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0">
-          <Settings2 className="h-4 w-4" />
-          <span className="hidden sm:inline">Catálogo</span>
-        </Button>
+        {trigger || (
+          <Button variant="secondary" size="sm" className="gap-2 bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0">
+            <Settings2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Catálogo</span>
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>

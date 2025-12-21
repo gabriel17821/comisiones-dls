@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RotateCcw, Calculator, Package, CalendarIcon, FileText, User, Save, RefreshCw, DollarSign, Plus, Search, X, Settings } from "lucide-react";
+import { RotateCcw, Calculator, Package, CalendarIcon, FileText, User, Save, RefreshCw, DollarSign, Plus, Search, X, Settings, BookOpen } from "lucide-react";
+import { ProductCatalogDialog } from "@/components/ProductCatalogDialog";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import { ClientSearchSelect } from "@/components/ClientSearchSelect";
 import { SaveSuccessAnimation } from "@/components/SaveSuccessAnimation";
@@ -280,6 +281,18 @@ export const CalculatorView = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <ProductCatalogDialog
+                  products={products}
+                  onUpdateProduct={onUpdateProduct}
+                  onDeleteProduct={onDeleteProduct}
+                  onAddProduct={onAddProduct}
+                  trigger={
+                    <Button variant="secondary" size="sm" className="gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      <span className="hidden sm:inline">Catálogo</span>
+                    </Button>
+                  }
+                />
                 <CSVInvoiceImporter 
                   products={products}
                   clients={clients}
