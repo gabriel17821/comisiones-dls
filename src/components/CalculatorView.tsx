@@ -65,7 +65,8 @@ interface CalculatorViewProps {
   onAddProduct: (name: string, percentage: number) => Promise<any>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<boolean>;
   onDeleteProduct: (id: string) => void;
-  onSaveInvoice: (ncf: string, invoiceDate: string, clientId?: string) => Promise<any>;
+  onSaveInvoice: (ncf: string, invoiceDate: string, products: { name: string; amount: number; percentage: number; commission: number }[], totalAmount: number, totalCommission: number, clientId?: string) => Promise<any>;
+  onBulkImport?: (invoices: { ncfSuffix: string; invoiceDate: Date; clientId?: string; lines: { productId: string; quantity: number; unitPrice: number }[] }[]) => Promise<void>;
   suggestedNcf?: number | null;
   lastInvoice?: Invoice;
   clients: Client[];
@@ -86,6 +87,7 @@ export const CalculatorView = ({
   onUpdateProduct,
   onDeleteProduct,
   onSaveInvoice,
+  onBulkImport,
   suggestedNcf,
   clients,
   onAddClient,
@@ -223,7 +225,15 @@ export const CalculatorView = ({
     setShowSaveAnimation(true);
     const fullNcf = `${ncfPrefix}${ncfSuffix.padStart(4, '0')}`;
     
-    await onSaveInvoice(fullNcf, format(invoiceDate, 'yyyy-MM-dd'), selectedClient?.id);
+    // Preparar los productos con sus datos correctos
+    const productData = calculations.breakdown.map(b => ({
+      name: b.name,
+      amount: b.amount,
+      percentage: b.percentage,
+      commission: b.commission,
+    }));
+    
+    await onSaveInvoice(fullNcf, format(invoiceDate, 'yyyy-MM-dd'), productData, actualTotal, calculations.totalCommission, selectedClient?.id);
     setIsSaving(false);
   };
 
@@ -287,6 +297,7 @@ export const CalculatorView = ({
                       unitPrice: l.unitPrice
                     })));
                   }}
+                  onBulkImport={onBulkImport}
                 />
                 <ProductCatalogDialog 
                   products={products}
@@ -381,10 +392,7 @@ export const CalculatorView = ({
                             onClick={() => handleAddLine(product.id)}
                             className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
                           >
-                            <span 
-                              className="h-6 w-6 rounded flex items-center justify-center text-[10px] font-bold text-primary-foreground shrink-0"
-                              style={{ backgroundColor: product.color }}
-                            >
+                            <span className="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold shrink-0">
                               {product.percentage}%
                             </span>
                             <span className="text-sm font-medium flex-1">{product.name}</span>
