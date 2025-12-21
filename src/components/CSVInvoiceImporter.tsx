@@ -41,7 +41,9 @@ interface ParsedRow {
   resolvedQuantity?: number;
   resolvedUnitPrice?: number;
   resolvedProductId?: string;
+  resolvedProductName?: string; // Nombre del producto matcheado
   resolvedClientId?: string;
+  resolvedClientName?: string; // Nombre del cliente matcheado
 }
 
 interface GroupedInvoice {
@@ -151,11 +153,11 @@ export const CSVInvoiceImporter = ({ products, clients, onImport, onBulkImport }
 
       const parts = line.split(',').map((p) => p.trim());
 
-      // Skip header-like rows (pdfplumber exports often repeat headers)
-      const isHeader = parts.some((p) =>
-        /^(ncf|suffix|fecha|date|cliente|client|producto|product|cantidad|qty|quantity|precio|price)$/i.test(p)
-      );
-      if (isHeader) continue;
+      // Skip header row (check first column)
+      const firstCol = parts[0]?.toLowerCase() || '';
+      if (firstCol.includes('ncf') || firstCol.includes('suffix') || firstCol === 'fecha') {
+        continue;
+      }
 
       const errors: string[] = [];
 
@@ -163,9 +165,13 @@ export const CSVInvoiceImporter = ({ products, clients, onImport, onBulkImport }
         errors.push(`Columnas inválidas (tiene ${parts.length}, necesita 6)`);
       }
 
-      const [ncfSuffix, fecha, cliente, producto, cantidad, precioUnitario] = parts;
+      const [ncfRaw, fecha, cliente, producto, cantidad, precioUnitario] = parts;
 
-      if (!ncfSuffix) errors.push('NCF vacío');
+      // Extraer últimos 4 dígitos del NCF (soporta "B0100002904" o "2904")
+      const ncfDigits = (ncfRaw || '').replace(/\D/g, '');
+      const ncfSuffix = ncfDigits.slice(-4).padStart(4, '0');
+
+      if (!ncfDigits) errors.push('NCF vacío');
       if (!fecha) errors.push('Fecha vacía');
       if (!producto) errors.push('Producto vacío');
       if (!cantidad) errors.push('Cantidad vacía');
@@ -173,7 +179,7 @@ export const CSVInvoiceImporter = ({ products, clients, onImport, onBulkImport }
 
       const row: ParsedRow = {
         lineNumber: i + 1,
-        ncfSuffix: ncfSuffix || '',
+        ncfSuffix,
         fecha: fecha || '',
         cliente: cliente || '',
         producto: producto || '',
@@ -184,6 +190,7 @@ export const CSVInvoiceImporter = ({ products, clients, onImport, onBulkImport }
       };
 
       if (row.isValid) {
+        // Parse date
         const parsedDate = parseDate(row.fecha);
         if (!parsedDate) {
           row.errors.push('Fecha inválida');
@@ -192,32 +199,42 @@ export const CSVInvoiceImporter = ({ products, clients, onImport, onBulkImport }
           row.resolvedDate = parsedDate;
         }
 
-        const qty = parseFloat(row.cantidad.replace(/[^\d.-]/g, ''));
+        // Parse quantity
+        const qtyStr = row.cantidad.replace(/[^\d.,-]/g, '').replace(',', '.');
+        const qty = parseFloat(qtyStr);
         if (isNaN(qty) || qty <= 0) {
-          row.errors.push('Cantidad debe ser número > 0');
+          row.errors.push(`Cantidad inválida: "${row.cantidad}"`);
           row.isValid = false;
         } else {
           row.resolvedQuantity = qty;
         }
 
-        const price = parseFloat(row.precioUnitario.replace(/[^\d.-]/g, ''));
+        // Parse price
+        const priceStr = row.precioUnitario.replace(/[^\d.,-]/g, '').replace(',', '.');
+        const price = parseFloat(priceStr);
         if (isNaN(price) || price <= 0) {
-          row.errors.push('Precio debe ser número > 0');
+          row.errors.push(`Precio inválido: "${row.precioUnitario}"`);
           row.isValid = false;
         } else {
           row.resolvedUnitPrice = price;
         }
 
+        // Match product with fuzzy logic
         const matchedProduct = matchProduct(row.producto, products);
         if (!matchedProduct) {
-          row.errors.push('Producto no encontrado (catálogo)');
+          row.errors.push(`Producto no encontrado: "${row.producto}"`);
           row.isValid = false;
         } else {
           row.resolvedProductId = matchedProduct.id;
+          row.resolvedProductName = matchedProduct.name;
         }
 
+        // Match client with fuzzy logic
         const matchedClient = matchClient(row.cliente, clients);
-        if (matchedClient) row.resolvedClientId = matchedClient.id;
+        if (matchedClient) {
+          row.resolvedClientId = matchedClient.id;
+          row.resolvedClientName = matchedClient.name;
+        }
       }
 
       rows.push(row);
@@ -467,24 +484,42 @@ export const CSVInvoiceImporter = ({ products, clients, onImport, onBulkImport }
                       <span className="text-sm font-semibold">{formatCurrency(inv.total)}</span>
                     </div>
 
+                    {/* Show matched client */}
+                    {inv.rows[0]?.resolvedClientName && (
+                      <div className="text-xs mb-2 flex items-center gap-1">
+                        <span className="text-muted-foreground">Cliente:</span>
+                        <span className="font-medium text-primary">{inv.rows[0].resolvedClientName}</span>
+                        {inv.rows[0].resolvedClientName !== inv.clientName && (
+                          <span className="text-muted-foreground/60 italic">← {inv.clientName}</span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       {inv.rows.map((r) => (
                         <div key={`${inv.ncfSuffix}-${r.lineNumber}`} className="text-xs">
                           {r.isValid ? (
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground">L{r.lineNumber}</span>
-                                <span className="font-medium">{r.producto}</span>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-muted-foreground shrink-0">L{r.lineNumber}</span>
+                                  <span className="font-medium text-primary truncate">{r.resolvedProductName}</span>
+                                </div>
+                                {r.resolvedProductName !== r.producto && (
+                                  <div className="text-[10px] text-muted-foreground/60 italic pl-5 truncate">
+                                    ← {r.producto}
+                                  </div>
+                                )}
                               </div>
-                              <span className="text-muted-foreground">
-                                {r.resolvedQuantity} × {r.resolvedUnitPrice}
+                              <span className="text-muted-foreground shrink-0">
+                                {r.resolvedQuantity} × {formatCurrency(r.resolvedUnitPrice || 0)}
                               </span>
                             </div>
                           ) : (
                             <div className="flex items-start gap-2 text-destructive">
-                              <AlertCircle className="h-4 w-4 mt-0.5" />
-                              <div>
-                                <p className="font-medium">L{r.lineNumber}: {r.producto || '(sin producto)'}</p>
+                              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">L{r.lineNumber}: {r.producto || '(sin producto)'}</p>
                                 <p className="text-[11px] opacity-90">{r.errors.join(' · ')}</p>
                               </div>
                             </div>
