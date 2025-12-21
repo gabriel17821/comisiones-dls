@@ -308,22 +308,22 @@ export const CalculatorView = ({
                 </Popover>
               </div>
 
-              {/* NCF - Campo completo */}
+              {/* NCF - Prefijo fijo + 4 dígitos editables */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">NCF</Label>
-                <Input 
-                  value={fullNcf} 
-                  onChange={(e) => {
-                    const val = e.target.value.toUpperCase();
-                    // Extraer solo los últimos 4 dígitos para el sufijo
-                    if (val.startsWith('B01')) {
-                      const suffix = val.slice(-4).replace(/\D/g, '');
-                      setNcfSuffix(suffix);
-                    }
-                  }}
-                  placeholder="B0100000000" 
-                  className="h-10 text-sm font-mono font-bold tracking-wider" 
-                />
+                <div className="flex items-center rounded-lg border border-input bg-background overflow-hidden h-10">
+                  <span className="px-3 text-sm font-mono font-medium text-muted-foreground bg-muted border-r border-input h-full flex items-center">
+                    {ncfPrefix}
+                  </span>
+                  <Input
+                    value={ncfSuffix}
+                    onChange={handleNcfChange}
+                    placeholder="0000"
+                    maxLength={4}
+                    inputMode="numeric"
+                    className="border-0 h-full text-sm font-mono font-bold text-center focus-visible:ring-0 rounded-l-none"
+                  />
+                </div>
               </div>
               {/* Client - Simplified with search */}
               <div className="space-y-1.5">

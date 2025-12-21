@@ -127,7 +127,7 @@ export const EditInvoiceDialog = ({ invoice, clients, onUpdate, onDelete, trigge
     const newProduct = {
       name: newProductName.trim(),
       amount: amount,
-      amountStr: newProductAmountStr,
+      amountStr: formatNumber(amount),
       percentage: newProductPercentage,
       commission: amount * (newProductPercentage / 100),
     };
@@ -136,6 +136,7 @@ export const EditInvoiceDialog = ({ invoice, clients, onUpdate, onDelete, trigge
     setNewProductName('');
     setNewProductPercentage(15);
     setNewProductAmountStr('');
+    // Cerrar el formulario después de agregar
     setShowAddProduct(false);
   };
 
@@ -398,52 +399,57 @@ export const EditInvoiceDialog = ({ invoice, clients, onUpdate, onDelete, trigge
 
               {/* Products Table */}
               <div className="border rounded-lg overflow-hidden">
-                <div className="grid grid-cols-12 gap-2 py-2 px-3 bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold border-b">
-                  <div className="col-span-5">Descripción</div>
-                  <div className="col-span-2 text-center">%</div>
-                  <div className="col-span-2 text-right">Monto</div>
+                <div className="grid grid-cols-12 gap-2 py-2.5 px-3 bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold border-b">
+                  <div className="col-span-4">Producto</div>
+                  <div className="col-span-2 text-center">% Com.</div>
+                  <div className="col-span-3 text-right">Monto</div>
                   <div className="col-span-2 text-right">Comisión</div>
                   <div className="col-span-1"></div>
                 </div>
                 
-                <div className="divide-y divide-border/50 max-h-48 overflow-y-auto">
+                <div className="divide-y divide-border/50 max-h-56 overflow-y-auto">
                   {products.map((product, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 py-2 px-3 items-center hover:bg-muted/20">
-                      <div className="col-span-5">
+                    <div key={index} className="grid grid-cols-12 gap-2 py-2.5 px-3 items-center hover:bg-muted/20 transition-colors">
+                      <div className="col-span-4">
                         <span className="font-medium text-sm truncate block">{product.name}</span>
                       </div>
                       <div className="col-span-2">
-                        <Input
-                          type="number"
-                          value={product.percentage}
-                          onChange={(e) => handleProductPercentageChange(index, e.target.value)}
-                          className="h-8 text-center text-xs font-bold"
-                          min={0}
-                          max={100}
-                        />
-                      </div>
-                      <div className="col-span-2">
                         <div className="relative">
-                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                          <Input
+                            type="number"
+                            value={product.percentage}
+                            onChange={(e) => handleProductPercentageChange(index, e.target.value)}
+                            className="h-8 text-center text-xs font-bold pr-5"
+                            min={0}
+                            max={100}
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">%</span>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">$</span>
                           <Input
                             type="text"
                             inputMode="decimal"
                             value={product.amountStr}
                             onChange={(e) => handleProductAmountChange(index, e.target.value)}
-                            className="h-8 pl-4 text-xs text-right font-medium"
+                            className="h-8 pl-5 text-xs text-right font-semibold"
                             placeholder="0.00"
                           />
                         </div>
                       </div>
-                      <div className="col-span-2 text-right text-sm font-semibold text-success">
-                        ${formatCurrency(product.commission)}
+                      <div className="col-span-2 text-right">
+                        <span className="text-sm font-bold text-success">
+                          ${formatNumber(product.commission)}
+                        </span>
                       </div>
                       <div className="col-span-1 flex justify-end">
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                          className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
                           onClick={() => handleRemoveProduct(index)}
                         >
                           <X className="h-3.5 w-3.5" />
@@ -453,32 +459,40 @@ export const EditInvoiceDialog = ({ invoice, clients, onUpdate, onDelete, trigge
                   ))}
 
                   {products.length === 0 && (
-                    <div className="py-4 text-center text-sm text-muted-foreground italic">
-                      Ningún producto con comisión variable
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      <span className="italic">No hay productos con comisión variable</span>
+                      <p className="text-xs mt-1">Haz clic en "Agregar" para añadir productos</p>
                     </div>
                   )}
 
                   {/* Rest Row */}
-                  <div className="grid grid-cols-12 gap-2 py-3 px-3 items-center bg-secondary/20">
-                    <div className="col-span-5 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0 bg-secondary" />
+                  <div className="grid grid-cols-12 gap-2 py-3 px-3 items-center bg-secondary/20 border-t border-border">
+                    <div className="col-span-4 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-secondary" />
                       <span className="font-medium text-sm">Resto de productos</span>
                     </div>
                     <div className="col-span-2">
-                      <Input
-                        type="number"
-                        value={restPercentage}
-                        onChange={(e) => setRestPercentage(Number(e.target.value))}
-                        className="h-8 text-center text-xs font-bold bg-secondary"
-                        min={0}
-                        max={100}
-                      />
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          value={restPercentage}
+                          onChange={(e) => setRestPercentage(Number(e.target.value))}
+                          className="h-8 text-center text-xs font-bold bg-secondary/50 pr-5"
+                          min={0}
+                          max={100}
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">%</span>
+                      </div>
                     </div>
-                    <div className="col-span-2 text-right text-sm text-muted-foreground">
-                      ${formatNumber(restAmount)}
+                    <div className="col-span-3 text-right">
+                      <span className="text-sm font-medium text-muted-foreground">
+                        ${formatNumber(restAmount)}
+                      </span>
                     </div>
-                    <div className="col-span-2 text-right text-sm font-semibold text-success">
-                      ${formatCurrency(restCommission)}
+                    <div className="col-span-2 text-right">
+                      <span className="text-sm font-bold text-success">
+                        ${formatNumber(restCommission)}
+                      </span>
                     </div>
                     <div className="col-span-1"></div>
                   </div>
