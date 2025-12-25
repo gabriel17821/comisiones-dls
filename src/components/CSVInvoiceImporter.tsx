@@ -251,7 +251,7 @@ B0100002905,2024-11-01,FARMACIA CENTRAL,CETERIPLEX CETIRIZINA TAB 1/100,3,900.0`
 
       if (!resolvedClientId && cliente) {
         const exactMatch = clients.find(
-          c => c.name.toLowerCase().trim() === cliente.toLowerCase().trim()
+          (c) => c.name.toUpperCase().trim() === cliente.toUpperCase().trim()
         );
         if (exactMatch) {
           resolvedClientId = exactMatch.id;
