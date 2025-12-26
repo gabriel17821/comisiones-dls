@@ -303,11 +303,23 @@ export const CalculatorView = ({
                       const client = clients.find(c => c.id === data.clientId);
                       setSelectedClient(client || null);
                     }
-                    setProductLines(data.lines.map(l => ({
+                    const newProductLines = data.lines.map(l => ({
                       productId: l.productId,
                       quantity: l.quantity,
                       unitPrice: l.unitPrice
-                    })));
+                    }));
+                    setProductLines(newProductLines);
+
+                    // Update productAmounts and totalInvoice
+                    let total = 0;
+                    const newProductAmounts: Record<string, number> = {};
+                    newProductLines.forEach(line => {
+                      const amount = line.quantity * line.unitPrice;
+                      total += amount;
+                      newProductAmounts[line.productId] = (newProductAmounts[line.productId] || 0) + amount;
+                    });
+                    setTotalInvoice(total);
+                    onProductChange(Object.keys(newProductAmounts)[0], Object.values(newProductAmounts)[0]);
                   }}
                   onBulkImport={onBulkImport}
                 />

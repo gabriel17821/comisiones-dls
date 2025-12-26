@@ -16,7 +16,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2, XCircle, ArrowRight } from 'lucide-react';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2, XCircle, ArrowRight, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { parse, format } from 'date-fns';
 import { formatCurrency } from '@/lib/formatters';
@@ -117,6 +130,16 @@ function parseNumber(str: string): number | null {
 function extractNcfSuffix(ncfRaw: string): string {
   const digits = (ncfRaw || '').replace(/\D/g, '');
   return digits.slice(-4).padStart(4, '0');
+}
+
+// Normalize text for robust matching
+function normalizeText(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 export const CSVInvoiceImporter = ({ products, clients, onImport, onBulkImport }: CSVInvoiceImporterProps) => {
@@ -223,10 +246,9 @@ B0100002905,2024-11-01,FARMACIA CENTRAL,CETERIPLEX CETIRIZINA TAB 1/100,3,900.0`
       }
 
       if (!resolvedProductId) {
-        // Try exact match (case-insensitive)
-        const exactMatch = products.find(
-          p => p.name.toLowerCase().trim() === producto.toLowerCase().trim()
-        );
+        // Try exact match (normalized)
+        const normalizedProducto = normalizeText(producto);
+        const exactMatch = products.find(p => normalizeText(p.name) === normalizedProducto);
         if (exactMatch) {
           resolvedProductId = exactMatch.id;
           resolvedProductName = exactMatch.name;
@@ -250,9 +272,8 @@ B0100002905,2024-11-01,FARMACIA CENTRAL,CETERIPLEX CETIRIZINA TAB 1/100,3,900.0`
       }
 
       if (!resolvedClientId && cliente) {
-        const exactMatch = clients.find(
-          (c) => c.name.toUpperCase().trim() === cliente.toUpperCase().trim()
-        );
+        const normalizedCliente = normalizeText(cliente);
+        const exactMatch = clients.find(c => normalizeText(c.name) === normalizedCliente);
         if (exactMatch) {
           resolvedClientId = exactMatch.id;
           resolvedClientName = exactMatch.name;
@@ -571,18 +592,10 @@ B0100002905,2024-11-01,FARMACIA CENTRAL,CETERIPLEX CETIRIZINA TAB 1/100,3,900.0`
                   <div key={csvName} className="flex items-center gap-2 p-2 bg-background rounded border">
                     <span className="text-sm font-medium flex-1 truncate">{csvName}</span>
                     <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <Select onValueChange={(value) => handleManualProductMatch(csvName, value)}>
-                      <SelectTrigger className="w-64">
-                        <SelectValue placeholder="Seleccionar producto..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.percentage}%)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ProductSearchSelect
+                      products={products}
+                      onSelect={(productId) => handleManualProductMatch(csvName, productId)}
+                    />
                   </div>
                 ))}
               </div>
@@ -708,5 +721,58 @@ B0100002905,2024-11-01,FARMACIA CENTRAL,CETERIPLEX CETIRIZINA TAB 1/100,3,900.0`
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+};
+
+// Componente para buscar productos
+const ProductSearchSelect = ({
+  products,
+  onSelect,
+}: {
+  products: Product[];
+  onSelect: (productId: string) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('');
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-64 justify-between"
+        >
+          {value
+            ? products.find((p) => p.id === value)?.name
+            : 'Seleccionar producto...'}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0">
+        <Command>
+          <CommandInput placeholder="Buscar producto..." />
+          <CommandList>
+            <CommandEmpty>No se encontraron productos.</CommandEmpty>
+            <CommandGroup>
+              {products.map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={p.name}
+                  onSelect={() => {
+                    setValue(p.id);
+                    onSelect(p.id);
+                    setOpen(false);
+                  }}
+                >
+                  {p.name} ({p.percentage}%)
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 };
