@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Client } from '@/hooks/useClients';
 import { ProductCatalogDialog } from '@/components/ProductCatalogDialog';
 import { ProductCSVImporter } from '@/components/ProductCSVImporter';
+import { MatchingManagementCard } from './MatchingManagementCard';
 
 interface SettingsPageProps {
   open: boolean;
@@ -32,6 +33,19 @@ export const SettingsPage = ({
   onDeleteProduct,
   onBulkAddProducts,
 }: SettingsPageProps) => {
+  // Render a loading state or null if products are not yet available.
+  if (!products) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <div className="flex justify-center items-center h-48">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -353,6 +367,9 @@ export const SettingsPage = ({
               </Button>
             </div>
           </Card>
+
+          {/* Matching Management */}
+          <MatchingManagementCard />
 
           {/* Danger Zone */}
           <Card className="p-4 space-y-3 border-destructive/50">
