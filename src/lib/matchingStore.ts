@@ -61,7 +61,7 @@ export function getClientMatches(): Record<string, ManualMatch> {
 export function saveClientMatch(csvName: string, clientId: string, clientName: string): void {
   const matches = getClientMatches();
   const key = normalizeForStorage(csvName);
-  matches[key] = { csvName: key, matchedId: clientId, matchedName: clientName.toUpperCase() };
+  matches[key] = { csvName: key, matchedId: clientId, matchedName: clientName };
   localStorage.setItem(CLIENT_MATCHES_KEY, JSON.stringify(matches));
 }
 
